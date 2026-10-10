@@ -1,6 +1,6 @@
 import type {Lead} from "../models/lead.js";
 
-export let leads: Lead[] = [
+ const initialLeads : Lead[] = [
   {
     id: 1,
     name: "Sophie Keller",
@@ -40,3 +40,12 @@ export let leads: Lead[] = [
     status: "contacted",
   },
 ];
+
+export let leads : Lead[] =  initialLeads.map(lead => ({...lead}));
+export function resetLeads() : void {
+  leads.splice(
+    0,
+    leads.length,
+    ...initialLeads.map(lead => ({...lead}))
+  )
+}
