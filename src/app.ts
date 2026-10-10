@@ -7,10 +7,21 @@ app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });
 });
 
+app.use(express.json());
 app.use("/leads", leadRoutes);
 
 const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
-    if (err instanceof NotFoundError) {
+    console.error(err);
+    if (
+        typeof err === "object" &&
+        err !== null &&
+        "type" in err &&
+        err.type === "entity.parse.failed"
+    ) {
+        res.status(400).json({ error: "Invalid JSON" });
+        return;
+    }
+    else if (err instanceof NotFoundError) {
         res.status(404).json({ error: "Lead not found" });
     } else if (err instanceof ValidationError) {
         res.status(400).json({ error: "Invalid input" });
