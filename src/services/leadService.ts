@@ -1,5 +1,6 @@
 import {type Lead, type LeadStatus} from "../models/lead.js";
 import {leads} from "../data/leadData.js";
+import {delay} from "../utils.js"
 
 import {
   NotFoundError,
@@ -22,7 +23,8 @@ export function findByStatus(leads: Lead[], status: LeadStatus): Lead[] {
   return res;
 }
 
-export function getLeadById(id: number): Lead {
+export async function getLeadById(id: number): Promise<Lead> {
+    await delay(50);
   const leadObj = leads.find((lead) => lead.id === id);
   if(leadObj === undefined)
   {
@@ -31,7 +33,8 @@ export function getLeadById(id: number): Lead {
   return leadObj;
 }
 
-export function addLead(lead: Lead): void {
+export async function addLead(lead: Lead): Promise<void> {
+    await delay(50);
   if(leads.some(leadObj => leadObj.id === lead.id))
   {
     throw new DuplicateIdError(`Lead with ID ${lead.id} already exists`);
@@ -39,12 +42,14 @@ export function addLead(lead: Lead): void {
   leads.push(lead);
 }
 
-export function updateLeadStatus(id: number, status: LeadStatus): void {
-  const lead = getLeadById(id);
+export async function updateLeadStatus(id: number, status: LeadStatus): Promise<void> {
+    await delay(50);
+  const lead = await getLeadById(id);
   lead.status = status;
 }
 
-export function deleteLead(id: number): void {
+export async function deleteLead(id: number): Promise<void> {
+    await delay(50);
   const idx: number = leads.findIndex((leadObj) => leadObj.id === id);
   if (idx === -1) {
     throw new NotFoundError(`Lead with ID ${id} doesn't exist`);
@@ -52,7 +57,8 @@ export function deleteLead(id: number): void {
   leads.splice(idx, 1);
 }
 
-export function listLeads(status?: LeadStatus): Lead[] {
+export async function listLeads(status?: LeadStatus): Promise<Lead[]> {
+    await delay(50);
   if (status === undefined) {
     const copy = leads.slice();
     return copy;
@@ -69,7 +75,8 @@ type CreateLeadInput = {
     status?: LeadStatus;
 }
 
-export function createLead(input: CreateLeadInput) : Lead {
+export async function createLead(input: CreateLeadInput) : Promise<Lead> {
+    await delay(50);
     if(input.name.trim() === "")
     {
         throw new ValidationError("Name needs to be at least 1 character long.");
