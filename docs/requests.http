@@ -1,0 +1,90 @@
+
+### 1. Health check
+GET http://localhost:3000/health
+
+
+### 2. Get all leads
+GET http://localhost:3000/leads
+
+
+### 3. Get one lead
+GET http://localhost:3000/leads/1
+
+
+### 4. Filter leads by status
+GET http://localhost:3000/leads?status=contacted
+
+
+### 5. Create a lead successfully
+POST http://localhost:3000/leads
+Content-Type: application/json
+
+{
+  "name": "Test Lead",
+  "email": "testlead@example.com",
+  "company": "Test Company"
+}
+
+
+### 6. Create a lead with an invalid email
+POST http://localhost:3000/leads
+Content-Type: application/json
+
+{
+  "name": "Invalid Lead",
+  "email": "not-an-email",
+  "company": "Test Company"
+}
+
+
+### 7. Create a lead with an unknown field
+POST http://localhost:3000/leads
+Content-Type: application/json
+
+{
+  "name": "Unknown Field Lead",
+  "email": "unknown@example.com",
+  "company": "Test Company",
+  "unexpectedField": "not allowed"
+}
+
+
+### 8. Update a lead's status successfully
+PATCH http://localhost:3000/leads/1
+Content-Type: application/json
+
+{
+  "status": "qualified"
+}
+
+
+### 9. Update a lead with an invalid status
+PATCH http://localhost:3000/leads/1
+Content-Type: application/json
+
+{
+  "status": "pending"
+}
+
+
+### 10. Use an invalid lead ID
+GET http://localhost:3000/leads/abc
+
+
+### 11. Get a lead that doesn't exist
+GET http://localhost:3000/leads/999999
+
+
+### 12. Delete a lead
+DELETE http://localhost:3000/leads/1
+
+
+### 13. Send malformed JSON
+POST http://localhost:3000/leads
+Content-Type: application/json
+
+{"name":
+
+
+### 14. Request an unknown route
+GET http://localhost:3000/unknown-route

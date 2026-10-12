@@ -27,3 +27,47 @@ When a client sends a request, the server receives its HTTP method, URL, headers
 2. **Sending responses:** In the raw server, I use `res.writeHead()` to set the status and headers and `JSON.stringify()` to convert data into JSON. Express simplifies this with methods such as `res.status(200).json(data)`.
 
 3. **Organising routes and handling errors:** Express lets me separate application setup, server startup, and lead routes into different files. It also supports centralised error-handling middleware, so I can map different errors to appropriate HTTP responses in one place.
+
+## Validation Responsibilities
+
+The API validates incoming requests at different layers. Each layer has a different responsibility.
+
+### 1. Request validation — Zod schemas
+
+Zod schemas validate incoming request data before it reaches the route handler's main logic.
+
+- `createLeadSchema` validates the fields required to create a lead, including the name, email, and company.
+- `updateLeadStatusSchema` ensures that the supplied status is one of the allowed values: `new`, `contacted`, `qualified`, or `lost`.
+- `leadIdSchema` ensures that the lead ID is a positive integer.
+- `listLeadsQuerySchema` validates the optional status filter when listing leads.
+
+The reusable `validate` middleware checks the request data against the relevant schema. If validation fails, it forwards the error to the central error handler, which returns an appropriate HTTP response. If validation succeeds, the validated data is stored in `res.locals` for the route handler to use.
+
+The schemas use `.strict()` where configured to reject unexpected fields.
+
+### 2. Service validation — business logic
+
+The service layer contains the application's operations and business rules. For example, `createLead` performs validation of the lead's name and email before creating a lead.
+
+Some validation currently exists in both the request schemas and the service layer. This provides protection when the service is called from different parts of the application, rather than only through an HTTP route. However, the two layers should have clearly defined responsibilities to avoid unnecessary duplication.
+
+### 3. Database validation — future PostgreSQL integration
+
+The current application stores leads in memory. When PostgreSQL is introduced, the database should enforce important data rules as well.
+
+Possible database constraints include:
+
+- `NOT NULL` for required fields.
+- A primary key for uniquely identifying each lead.
+- A `UNIQUE` constraint on email if the application's requirements demand unique lead emails.
+- A `CHECK` constraint for allowed lead statuses.
+
+Request validation improves error handling by rejecting invalid input early. Database constraints provide an additional layer of protection and help maintain data integrity.
+
+### Summary
+
+- **Zod schemas:** Validate incoming request data.
+- **Service layer:** Enforce application rules and protect operations called from different entry points.
+- **PostgreSQL:** Enforce data integrity through database constraints.
+
+These layers complement one another; request validation does not replace service checks or database constraints.

@@ -1,63 +1,41 @@
 import {Router} from "express";
 import { listLeads , getLeadById, createLead, updateLeadStatus, deleteLead} from "../services/leadService.js";
-import { type LeadStatus } from "../models/lead.js";
-import { ValidationError } from "../errors.js";
+import { validate } from "../middleware/validate.js";
+import { leadIdSchema, listLeadsQuerySchema, createLeadSchema, updateLeadStatusSchema } from "../schemas/leadSchemas.js";
 
 
 const router = Router();
 
-router.get("/", async (req, res) => {
-    const status = req.query.status;
-    if(status !== undefined){
-        if(typeof status != "string" || !["new", "contacted", "qualified"].includes(status)){
-            throw new ValidationError("Invalid lead status");
-        }
-    }
-
-    const leads = await listLeads(status as LeadStatus | undefined);
+router.get("/", validate(listLeadsQuerySchema, "query"),async (req, res) => {
+    const {status} = res.locals.query;
+    const leads = await listLeads(status);
     res.status(200).json(leads);
 });
 
-router.get("/:id", async (req, res) => {
-    const idObj = Number(req.params.id);
-    if(!Number.isInteger(idObj) || idObj <= 0)
-    {
-        throw new ValidationError("Invalid lead ID");
-    }
-    const lead = await getLeadById(idObj);
+router.get("/:id", validate(leadIdSchema, "params") ,async (req, res) => {
+    const { id } = res.locals.params;
+    const lead = await getLeadById(id);
     res.status(200).json(lead);
 });
 
-router.post("/", async(req, res) => {
-    const input = req.body;
+router.post("/",validate(createLeadSchema, "body"), async(req, res) => {
+    const input = res.locals.body;
     const newLead = await createLead(input);
     res.status(201).json(newLead);
 })
 
-router.patch("/:id", async(req, res) => {
-    const idObj = Number(req.params.id);
-    if(!Number.isInteger(idObj) || idObj <= 0)
-    {
-        throw new ValidationError("Invalid lead ID");
-    }
-    const status = req.body.status;
-    if(typeof status !== "string" || !["new", "contacted", "qualified"].includes(status))
-    {
-        throw new ValidationError("Invalid status");
-    }
-    const validStatus = status as LeadStatus;
-    await updateLeadStatus(idObj, validStatus);
-    const updatedlead = await getLeadById(idObj);
+router.patch("/:id", validate(leadIdSchema, "params"), validate(updateLeadStatusSchema, "body"), async(req, res) => {
+    const { id } = res.locals.params;
+    const { status } = res.locals.body;
+
+    await updateLeadStatus(id, status);
+    const updatedlead = await getLeadById(id);
     res.status(200).json(updatedlead)
 });
 
-router.delete("/:id", async(req, res) => {
-    const idObj = Number(req.params.id);
-    if(!Number.isInteger(idObj) || idObj <= 0)
-    {
-        throw new ValidationError("Invalid lead ID");
-    }
-    await deleteLead(idObj);
+router.delete("/:id", validate(leadIdSchema, "params"), async(req, res) => {
+    const { id } = res.locals.params;
+    await deleteLead(id);
     res.status(204).end();
 });
 
