@@ -15,7 +15,6 @@ app.get("/health", (req, res) => {
 });
 
 const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
-    console.error(err);
     if(
         typeof err === "object" &&
         err !== null && "type" in err &&
@@ -93,7 +92,7 @@ const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
         });
         return;
     }
-
+    console.error(err);
     res.status(500).json({
         error: {
             code: "INTERNAL_SERVER_ERROR",

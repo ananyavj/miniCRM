@@ -71,3 +71,19 @@ Request validation improves error handling by rejecting invalid input early. Dat
 - **PostgreSQL:** Enforce data integrity through database constraints.
 
 These layers complement one another; request validation does not replace service checks or database constraints.
+
+## Service-to-SQL Mapping
+
+The current CRM uses in-memory data for lead operations. When PostgreSQL integration is introduced, the following SQL statements will replace the corresponding in-memory operations.
+
+| Service operation                 |                                                   SQL statement |
+
+| `getLeadById(id)`                 |                               `SELECT * FROM leads WHERE id = $1` |
+| `listLeads()`                     |                                               `SELECT * FROM leads` |
+| `createLead(...)`                 |                   `INSERT INTO leads (...) VALUES (...) RETURNING *` |
+| `updateLeadStatus(id, status)`    |           `UPDATE leads SET status = $2 WHERE id = $1 RETURNING *` |
+| `deleteLead(id)`                  |                       `DELETE FROM leads WHERE id = $1 RETURNING *` |
+
+The `$1` and `$2` placeholders represent parameter values supplied separately to the SQL query. Parameterized queries help prevent SQL injection by keeping user-provided data separate from SQL instructions.
+
+PostgreSQL integration will be implemented later; these statements document the planned mapping only.
