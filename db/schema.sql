@@ -36,8 +36,8 @@ CREATE TABLE IF NOT EXISTS leads (
         CHECK (btrim(company) <> ''),
     CONSTRAINT leads_email_check
         CHECK (POSITION('@' IN email) > 0),
-    CONSTRAINT leads_email_unique
-        UNIQUE (email),
+    CONSTRAINT leads_organization_email_unique
+        UNIQUE (organization_id, email),
     CONSTRAINT leads_organization_id_fkey
         FOREIGN KEY (organization_id)
         REFERENCES organizations(id)

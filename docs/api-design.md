@@ -58,19 +58,39 @@ Some validation currently exists in both the request schemas and the service lay
 
 PostgreSQL independently enforces data integrity, including when data is written without going through the Express API. The following constraints are defined for the `leads` table:
 
-- **`NOT NULL`:** Prevents required columns such as `name`, `email`, `company`, and `status` from containing `NULL`.
+- **`NOT NULL`:** Prevents required columns such as `name`, `email`, `company`, `status`, and `organization_id` from containing `NULL`.
 - **Primary key:** Uniquely identifies each lead through `id`.
 - **`leads_status_check`:** Restricts `status` to `new`, `contacted`, `qualified`, or `lost`.
 - **`leads_name_not_blank`:** Rejects empty or whitespace-only names using `btrim(name)`.
 - **`leads_company_not_blank`:** Rejects empty or whitespace-only company names using `btrim(company)`.
 - **`leads_email_check`:** Requires the email to contain an `@` character.
-- **`leads_email_unique`:** Prevents duplicate email values across the entire `leads` table.
+- **`leads_organization_email_unique`:** Enforces uniqueness on the combination of `organization_id` and `email`. The same email can exist in different organizations, but cannot appear more than once within the same organization.
 
 The `status` column defaults to `new`, and `created_at` defaults to the current timestamp.
 
 The database email constraint is intentionally simpler than Zod's email validation. It only checks for an `@` character and does not guarantee that an address is a valid email format.
 
-**Email uniqueness decision:** Email addresses are currently globally unique across all leads. This is enforced by `leads_email_unique`. When organizations are introduced, this decision should be revisited to determine whether uniqueness should remain global or apply separately within each organization.
+**Email uniqueness decision:** Email uniqueness is organization-scoped rather than global. This allows two organizations to independently track the same person as a lead. It also avoids revealing whether another organization already has a lead with a particular email through a global duplicate-email constraint.
+
+The database also enforces organization relationships:
+
+- **`users_organization_id_fkey`:** Requires each user to reference an existing organization. `ON DELETE RESTRICT` prevents deleting an organization while users still reference it.
+- **`leads_organization_id_fkey`:** Requires each lead to reference an existing organization. `ON DELETE RESTRICT` prevents deleting an organization while leads still reference it.
+- **`leads_assigned_to_fkey`:** Requires a non-null `assigned_to` value to reference an existing user. Because the column is nullable, leads may remain unassigned. `ON DELETE SET NULL` preserves a lead if its assigned user is deleted.
+
+**Known limitation — cross-organization assignments:** The current `leads_assigned_to_fkey` checks only whether the assigned user exists. It does not enforce that the user belongs to the same organization as the lead.
+
+For example, a lead belonging to organization 1 can currently be assigned to user 3, even if user 3 belongs to organization 2. This was demonstrated in the SQL practice tests. The assignment is accepted by the current foreign key, but it violates the intended tenant-isolation rule.
+
+This limitation is intentionally deferred. A composite foreign key is planned for Day 21 to enforce that a lead and its assigned user belong to the same organization.
+
+### Summary
+
+- **Zod schemas:** Validate incoming request data and provide early feedback.
+- **Service layer:** Enforce application rules and protect operations called from different entry points.
+- **PostgreSQL:** Independently enforce data integrity through database constraints.
+
+These layers complement one another. Request validation does not replace service checks or database constraints.
 
 ### Summary
 
@@ -91,6 +111,8 @@ The current CRM uses in-memory data for lead operations. The following SQL state
 | `createLead(..., organizationId)` | `INSERT INTO leads (...) VALUES (...) RETURNING *` |
 | `updateLeadStatus(id, status, organizationId)` | `UPDATE leads SET status = $2 WHERE id = $1 AND organization_id = $3 RETURNING *` |
 | `deleteLead(id, organizationId)` | `DELETE FROM leads WHERE id = $1 AND organization_id = $2 RETURNING *` |
+|`getOrganizationById(id)`	|`SELECT * FROM organizations WHERE id = $1`|
+|`listUsers(organizationId)`	|`SELECT * FROM users WHERE organization_id = $1`|
 
 The `$1`, `$2`, and `$3` placeholders represent parameter values supplied separately to the SQL query. Parameterized queries help prevent SQL injection by keeping user-provided data separate from SQL instructions.
 
