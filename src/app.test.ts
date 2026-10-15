@@ -1,5 +1,5 @@
 //src/app.test.ts
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import request from "supertest";
 import app from "./app.js";
 import { pool } from "./db/pool.js";
@@ -314,6 +314,43 @@ it("rolls back database changes when a transaction fails", async () => {
 });
 
 
+it("discards the connection when rollback fails", async () => {
+    const rollbackError = new Error("Rollback failed");
+
+    const fakeClient = {
+        query: vi.fn(async (sql: string) => {
+            if (sql === "ROLLBACK") {
+                throw rollbackError;
+            }
+
+            return { rows: [], rowCount: 0 };
+        }),
+        release: vi.fn()
+    };
+
+    const connectSpy = vi
+        .spyOn(pool, "connect")
+        .mockResolvedValue(fakeClient as never);
+
+    try {
+        await expect(
+            withTransaction(async () => {
+                throw new Error("Original operation failed");
+            })
+        ).rejects.toThrow("Original operation failed");
+
+        expect(fakeClient.query).toHaveBeenCalledWith("BEGIN");
+        expect(fakeClient.query).toHaveBeenCalledWith("ROLLBACK");
+
+        expect(fakeClient.release).toHaveBeenCalledTimes(1);
+        expect(fakeClient.release).toHaveBeenCalledWith(
+            expect.any(Error)
+        );
+    } finally {
+        connectSpy.mockRestore();
+    }
+});
+
 it("rejects assigning a lead to a user from another organization", async () => {
     const created = await request(app)
         .post("/leads")
@@ -504,5 +541,37 @@ it("rejects assigning a nonexistent user", async () => {
             .set(org2);
 
         expect(stillExists.status).toBe(200);
+    });
+
+    it("enforces same-organization assignment in PostgreSQL", async () => {
+    const created = await request(app)
+        .post("/leads")
+        .set(org1)
+        .send({
+            name: "Database Constraint Test",
+            email: "db-constraint@example.com",
+            company: "Test Company"
+        });
+
+    expect(created.status).toBe(201);
+
+    await expect(
+        pool.query(
+            `UPDATE leads
+             SET assigned_to = $1
+             WHERE id = $2 AND organization_id = $3`,
+            [2, created.body.id, 1]
+        )
+    ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "leads_assigned_to_org_fkey"
+    });
+
+    const result = await pool.query(
+        "SELECT assigned_to FROM leads WHERE id = $1",
+        [created.body.id]
+    );
+
+    expect(result.rows[0].assigned_to).toBeNull();
     });
 });

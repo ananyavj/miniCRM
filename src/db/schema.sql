@@ -14,7 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT users_organization_id_fkey
         FOREIGN KEY (organization_id)
         REFERENCES organizations(id)
-        ON DELETE RESTRICT
+        ON DELETE RESTRICT,
+    CONSTRAINT users_id_organization_id_unique
+        UNIQUE (id, organization_id)
 );
 
 CREATE TABLE IF NOT EXISTS leads (
@@ -42,8 +44,8 @@ CREATE TABLE IF NOT EXISTS leads (
         FOREIGN KEY (organization_id)
         REFERENCES organizations(id)
         ON DELETE RESTRICT,
-    CONSTRAINT leads_assigned_to_fkey
-        FOREIGN KEY (assigned_to)
-        REFERENCES users(id)
-        ON DELETE SET NULL
+    CONSTRAINT leads_assigned_to_org_fkey
+        FOREIGN KEY (assigned_to, organization_id)
+        REFERENCES users(id, organization_id)
+        ON DELETE SET NULL (assigned_to)
 );
