@@ -1,10 +1,12 @@
+//src/services/leadService.ts
 import {type Lead, type LeadStatus} from "../models/lead.js";
 import{
     listLeadsByOrg,
     findLeadById,
     createLead as createLeadInDb,
     updateLeadStatus as updateLeadStatusInDb,
-    deleteLead as deleteLeadInDb
+    deleteLead as deleteLeadInDb,
+    assignLeadToUser
 } from "../db/leadRepository.js";
 import {
   NotFoundError,
@@ -78,5 +80,13 @@ export async function deleteLead(
 export async function listLeads(organizationId : number,
     status? : LeadStatus): Promise<Lead[]> {
     return listLeadsByOrg(organizationId, status);
+}
+
+export async function assignLead(
+  organizationId : number,
+  leadId : number,
+  userId : number
+) : Promise<Lead> {
+  return assignLeadToUser(organizationId, leadId, userId);
 }
 

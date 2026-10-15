@@ -1,8 +1,9 @@
-
+//src/app.test.ts
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import request from "supertest";
 import app from "./app.js";
 import { pool } from "./db/pool.js";
+import { withTransaction } from "./db/withTransaction.js";
 
 const org1 = { "x-org-id": "1" };
 const org2 = { "x-org-id": "2" };
@@ -31,6 +32,13 @@ describe("MiniCRM API", () => {
             `INSERT INTO organizations (name)
              VALUES ('Test Organization Alpha'),
                     ('Test Organization Beta')`
+        );
+
+        await pool.query(
+            `INSERT INTO users (organization_id, name, email)
+            VALUES
+                (1, 'Alice', 'alice@alpha.example.com'),
+                (2, 'Bob', 'bob@beta.example.com')`
         );
     });
 
@@ -116,6 +124,33 @@ describe("MiniCRM API", () => {
         expect(response.body.id).toBeDefined();
     });
 
+    it("returns 409 when an organization creates a duplicate lead email", async () => {
+        const lead = {
+            name: "First Lead",
+            email: "duplicate@example.com",
+            company: "Test Company"
+        };
+
+        const firstResponse = await request(app)
+            .post("/leads")
+            .set(org1)
+            .send(lead);
+
+        expect(firstResponse.status).toBe(201);
+
+        const duplicateResponse = await request(app)
+            .post("/leads")
+            .set(org1)
+            .send({
+                ...lead,
+                name: "Second Lead"
+            });
+
+        expect(duplicateResponse.status).toBe(409);
+        expect(duplicateResponse.body.error.code).toBe("DUPLICATE_EMAIL");
+        expect(duplicateResponse.body.error.message).not.toContain("leads_organization_email_unique");
+    });
+
     it("rejects an invalid email", async () => {
         const response = await request(app)
             .post("/leads")
@@ -174,6 +209,155 @@ describe("MiniCRM API", () => {
             .patch("/leads/1")
             .set(org1)
             .send({ status: "pending" });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    });
+    it("maps a PostgreSQL status constraint violation to 400", async () => {
+    await expect(
+        pool.query(
+            `INSERT INTO leads
+                (name, email, company, status, organization_id)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+                "Invalid Status Lead",
+                "invalid-status@example.com",
+                "Test Company",
+                "pending",
+                1
+            ]
+        )
+    ).rejects.toMatchObject({
+        code: "23514",
+        constraint: "leads_status_check"
+        });
+    });
+
+    it("rejects a lead with a nonexistent organization in PostgreSQL", async () => {
+    await expect(
+        pool.query(
+            `INSERT INTO leads
+                (name, email, company, organization_id)
+             VALUES ($1, $2, $3, $4)`,
+            [
+                "Invalid Organization Lead",
+                "invalid-org@example.com",
+                "Test Company",
+                999999
+            ]
+        )
+    ).rejects.toMatchObject({
+        code: "23503",
+        constraint: "leads_organization_id_fkey"
+        });
+    });
+
+
+    it("assigns a lead to a user in the same organization", async () => {
+    const created = await request(app)
+        .post("/leads")
+        .set(org1)
+        .send({
+            name: "Assignment Test",
+            email: "assignment@example.com",
+            company: "Test Company"
+        });
+
+    expect(created.status).toBe(201);
+
+    const response = await request(app)
+        .patch(`/leads/${created.body.id}/assignment`)
+        .set(org1)
+        .send({ userId: 1 });
+
+    expect(response.status).toBe(200);
+
+    const result = await pool.query(
+        "SELECT assigned_to FROM leads WHERE id = $1",
+        [created.body.id]
+    );
+
+    expect(result.rows[0].assigned_to).toBe(1);
+});
+
+
+it("rolls back database changes when a transaction fails", async () => {
+    const created = await request(app)
+        .post("/leads")
+        .set(org1)
+        .send({
+            name: "Rollback Test",
+            email: "rollback@example.com",
+            company: "Test Company"
+        });
+
+    expect(created.status).toBe(201);
+
+    await expect(
+        withTransaction(async (client) => {
+            await client.query(
+                "UPDATE leads SET assigned_to = $1 WHERE id = $2",
+                [1, created.body.id]
+            );
+
+            // Simulate a failure after the database has changed.
+            throw new Error("Simulated transaction failure");
+        })
+    ).rejects.toThrow("Simulated transaction failure");
+
+    const result = await pool.query(
+        "SELECT assigned_to FROM leads WHERE id = $1",
+        [created.body.id]
+    );
+
+    expect(result.rows[0].assigned_to).toBeNull();
+});
+
+
+it("rejects assigning a lead to a user from another organization", async () => {
+    const created = await request(app)
+        .post("/leads")
+        .set(org1)
+        .send({
+            name: "Cross-Organization Test",
+            email: "cross-org@example.com",
+            company: "Test Company"
+        });
+
+    expect(created.status).toBe(201);
+
+    const response = await request(app)
+        .patch(`/leads/${created.body.id}/assignment`)
+        .set(org1)
+        .send({ userId: 2 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+
+    const result = await pool.query(
+        "SELECT assigned_to FROM leads WHERE id = $1",
+        [created.body.id]
+    );
+
+    expect(result.rows[0].assigned_to).toBeNull();
+});
+
+it("rejects assigning a nonexistent user", async () => {
+    const created = await request(app)
+        .post("/leads")
+        .set(org1)
+        .send({
+            name: "Missing User Test",
+            email: "missing-user@example.com",
+            company: "Test Company"
+        });
+
+    expect(created.status).toBe(201);
+
+    const response = await request(app)
+        .patch(`/leads/${created.body.id}/assignment`)
+        .set(org1)
+        .send({ userId: 999999 });
 
         expect(response.status).toBe(400);
         expect(response.body.error.code).toBe("VALIDATION_ERROR");

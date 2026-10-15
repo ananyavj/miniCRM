@@ -1,7 +1,8 @@
+//src/routes/leadRoutes.ts
 import {Router} from "express";
-import { listLeads , getLeadById, createLead, updateLeadStatus, deleteLead} from "../services/leadService.js";
+import { listLeads , getLeadById, createLead, updateLeadStatus, deleteLead, assignLead} from "../services/leadService.js";
 import { validate } from "../middleware/validate.js";
-import { leadIdSchema, listLeadsQuerySchema, createLeadSchema, updateLeadStatusSchema } from "../schemas/leadSchemas.js";
+import { leadIdSchema, listLeadsQuerySchema, createLeadSchema, updateLeadStatusSchema , assignLeadSchema} from "../schemas/leadSchemas.js";
 import { requireOrganization } from "../middleware/organization.js";
 
 
@@ -39,6 +40,19 @@ router.patch("/:id", validate(leadIdSchema, "params"), validate(updateLeadStatus
     res.status(200).json(updatedlead)
 });
 
+router.patch("/:id/assignment",
+    validate(leadIdSchema, "params"),
+    validate(assignLeadSchema, "body"),
+    async (req, res) => {
+        const organizationId : number = res.locals.organizationId;
+        const { id } = res.locals.params;
+        const { userId } = res.locals.body;
+
+        const updatedLead = await assignLead(organizationId, id, userId);
+
+        res.status(200).json(updatedLead);
+    }
+)
 router.delete("/:id", validate(leadIdSchema, "params"), async(req, res) => {
     const organizationId : number = res.locals.organizationId;
     const { id } = res.locals.params;

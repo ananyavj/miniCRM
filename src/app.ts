@@ -1,3 +1,4 @@
+//src/app.ts
 import express , { type ErrorRequestHandler } from "express";
 import leadRoutes from "./routes/leadRoutes.js"
 import { NotFoundError, DuplicateIdError, ValidationError } from "./errors.js";
@@ -32,6 +33,20 @@ app.get("/health/db", async (req, res) => {
         });
     }
 })
+
+function isPostgresError(
+    err : unknown
+) : err is {
+    code : string;
+    constraint? : string
+}{
+    return (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        typeof err.code === "string"
+    );
+}
 
 const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
     if(
@@ -110,6 +125,85 @@ const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
             }
         });
         return;
+    }
+
+    if(isPostgresError(err)){
+        const{code, constraint} = err;
+
+        if(
+            code === "23505" &&
+            constraint === "leads_organization_email_unique"
+        ){
+            res.status(409).json({
+                 error: {
+                    code: "DUPLICATE_EMAIL",
+                    message: "A lead with this email already exists in this organization.",
+                    details: []
+                 }
+            });
+            return;
+        }
+
+         if (
+        code === "23514" &&
+        constraint === "leads_status_check"
+        ) {
+            res.status(400).json({
+                error: {
+                    code: "INVALID_LEAD_STATUS",
+                    message: "Lead status must be new, contacted, qualified, or lost.",
+                    details: []
+                }
+            });
+            return;
+        }
+
+        if (
+            code === "23514" &&
+            (
+                constraint === "leads_name_not_blank" ||
+                constraint === "leads_company_not_blank" ||
+                constraint === "leads_email_check"
+            )
+        ) {
+            res.status(400).json({
+                error: {
+                    code: "VALIDATION_ERROR",
+                    message: "Lead data violates a validation rule.",
+                    details: []
+                }
+            });
+            return;
+        }
+
+        if (code === "23503") {
+            const isAssignmentError =
+                constraint === "leads_assigned_to_fkey";
+
+            res.status(400).json({
+                error: {
+                    code: isAssignmentError
+                        ? "INVALID_ASSIGNEE"
+                        : "INVALID_REFERENCE",
+                    message: isAssignmentError
+                        ? "The assigned user does not exist."
+                        : "A referenced record does not exist.",
+                    details: []
+                }
+            });
+            return;
+        }
+
+        if (code === "23502") {
+            res.status(400).json({
+                error: {
+                    code: "REQUIRED_FIELD_MISSING",
+                    message: "A required field is missing.",
+                    details: []
+                }
+            });
+            return;
+        }
     }
     console.error(err);
     res.status(500).json({

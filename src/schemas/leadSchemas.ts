@@ -20,3 +20,7 @@ export const leadIdSchema = z.object({
 export const listLeadsQuerySchema = z.object({
     status : leadStatusSchema.optional(),
 }).strict();
+
+export const assignLeadSchema = z.object({
+    userId: z.number().int().positive()
+}).strict();
