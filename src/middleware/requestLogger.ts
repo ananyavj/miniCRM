@@ -9,7 +9,8 @@ export function requestLogger(
     res.on("finish", () => {
         const duration = Date.now() - startTime;
         console.log(
-            `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+            `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`
+        );
     });
 
     next();

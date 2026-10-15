@@ -3,6 +3,7 @@ import leadRoutes from "./routes/leadRoutes.js"
 import { NotFoundError, DuplicateIdError, ValidationError } from "./errors.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";
+import {pool} from "./db/pool.js";
 
 const app = express();
 
@@ -13,6 +14,24 @@ app.use("/leads", leadRoutes);
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });
 });
+app.get("/health/db", async (req, res) => {
+    try {
+        await pool.query("SELECT 1");
+
+        res.status(200).json({
+            status: "ok",
+            database: "connected"
+        });
+    }
+    catch(error){
+        console.error("Database Health Check Failed", error);
+
+         res.status(503).json({
+            status: "error",
+            database: "unavailable"
+        });
+    }
+})
 
 const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
     if(
