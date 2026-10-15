@@ -1,90 +1,232 @@
 
-### 1. Health check
-GET http://localhost:3000/health
+@baseUrl = http://localhost:3000
+
+### ==================================================
+### A. HEALTH CHECKS
+### ==================================================
+
+### A1. API health — should return 200
+GET {{baseUrl}}/health
+
+### A2. Database health — should return 200 if connected
+GET {{baseUrl}}/health/db
 
 
-### 2. Get all leads
-GET http://localhost:3000/leads
+### ==================================================
+### B. ORGANIZATION HEADER VALIDATION
+### ==================================================
+
+### B1. Missing organization header — should return 400
+GET {{baseUrl}}/leads
+
+### B2. Non-numeric organization ID — should return 400
+GET {{baseUrl}}/leads
+x-org-id: abc
+
+### B3. Zero organization ID — should return 400
+GET {{baseUrl}}/leads
+x-org-id: 0
+
+### B4. Negative organization ID — should return 400
+GET {{baseUrl}}/leads
+x-org-id: -1
+
+### B5. Decimal organization ID — should return 400
+GET {{baseUrl}}/leads
+x-org-id: 1.5
+
+### B6. Valid organization ID — should pass header validation
+GET {{baseUrl}}/leads
+x-org-id: 1
 
 
-### 3. Get one lead
-GET http://localhost:3000/leads/1
+### ==================================================
+### C. READ LEADS
+### ==================================================
+
+### C1. List leads for organization 1
+GET {{baseUrl}}/leads
+x-org-id: 1
+
+### C2. Filter leads by status
+GET {{baseUrl}}/leads?status=contacted
+x-org-id: 1
+
+### C3. Invalid status — should return 400
+GET {{baseUrl}}/leads?status=pending
+x-org-id: 1
+
+### C4. Get lead ID 1 within organization 1
+GET {{baseUrl}}/leads/1
+x-org-id: 1
+
+### C5. Invalid lead ID — should return 400
+GET {{baseUrl}}/leads/abc
+x-org-id: 1
+
+### C6. Nonexistent lead ID — should return 404
+GET {{baseUrl}}/leads/999999
+x-org-id: 1
 
 
-### 4. Filter leads by status
-GET http://localhost:3000/leads?status=contacted
+### ==================================================
+### D. CREATE LEADS
+### ==================================================
 
-
-### 5. Create a lead successfully
-POST http://localhost:3000/leads
+### D1. Create a lead for organization 1
+# @name createOrg1Lead
+POST {{baseUrl}}/leads
 Content-Type: application/json
+x-org-id: 1
 
 {
-  "name": "Test Lead",
-  "email": "testlead@example.com",
-  "company": "Test Company"
+  "name": "Day14 Test Lead",
+  "email": "day14.test@example.com",
+  "company": "Test Company",
+  "phone": "9876543210"
 }
 
-
-### 6. Create a lead with an invalid email
-POST http://localhost:3000/leads
+### D2. Missing required field — should return 400
+POST {{baseUrl}}/leads
 Content-Type: application/json
+x-org-id: 1
 
 {
-  "name": "Invalid Lead",
+  "name": "Missing Company",
+  "email": "missing.company@example.com"
+}
+
+### D3. Invalid email — should return 400
+POST {{baseUrl}}/leads
+Content-Type: application/json
+x-org-id: 1
+
+{
+  "name": "Invalid Email",
   "email": "not-an-email",
   "company": "Test Company"
 }
 
-
-### 7. Create a lead with an unknown field
-POST http://localhost:3000/leads
+### D4. Blank name — should return 400
+POST {{baseUrl}}/leads
 Content-Type: application/json
+x-org-id: 1
 
 {
-  "name": "Unknown Field Lead",
-  "email": "unknown@example.com",
-  "company": "Test Company",
-  "unexpectedField": "not allowed"
+  "name": "   ",
+  "email": "blank.name@example.com",
+  "company": "Test Company"
 }
 
 
-### 8. Update a lead's status successfully
-PATCH http://localhost:3000/leads/1
+### ==================================================
+### E. UPDATE LEAD STATUS
+### ==================================================
+
+### E1. Update lead ID 1 — should return 200 if it belongs to org 1
+PATCH {{baseUrl}}/leads/1
 Content-Type: application/json
+x-org-id: 1
+
+{
+  "status": "qualified"
+}
+
+### E2. Invalid status — should return 400
+PATCH {{baseUrl}}/leads/1
+Content-Type: application/json
+x-org-id: 1
+
+{
+  "status": "pending"
+}
+
+### E3. Nonexistent lead — should return 404
+PATCH {{baseUrl}}/leads/999999
+Content-Type: application/json
+x-org-id: 1
 
 {
   "status": "qualified"
 }
 
 
-### 9. Update a lead with an invalid status
-PATCH http://localhost:3000/leads/1
+### ==================================================
+### F. DELETE LEAD
+### ==================================================
+
+### F1. Delete lead ID 1 — should return 204 if it belongs to org 1
+DELETE {{baseUrl}}/leads/1
+x-org-id: 1
+
+### F2. Delete nonexistent lead — should return 404
+DELETE {{baseUrl}}/leads/999999
+x-org-id: 1
+
+
+### ==================================================
+### G. CROSS-TENANT ISOLATION
+### ==================================================
+
+### G1. Create a lead belonging to organization 2
+# @name createOrg2Lead
+POST {{baseUrl}}/leads
 Content-Type: application/json
+x-org-id: 2
 
 {
-  "status": "pending"
+  "name": "Organization Two Test Lead",
+  "email": "org2.test@example.com",
+  "company": "Organization Two"
 }
 
+### G2. Try to read organization 2's lead as organization 1
+# Expected: 404, not the lead's data
+GET {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
+x-org-id: 1
 
-### 10. Use an invalid lead ID
-GET http://localhost:3000/leads/abc
+### G3. Read the same lead as organization 2
+# Expected: 200, with the lead's data
+GET {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
+x-org-id: 2
 
-
-### 11. Get a lead that doesn't exist
-GET http://localhost:3000/leads/999999
-
-
-### 12. Delete a lead
-DELETE http://localhost:3000/leads/1
-
-
-### 13. Send malformed JSON
-POST http://localhost:3000/leads
+### G4. Try to update organization 2's lead as organization 1
+# Expected: 404
+PATCH {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
 Content-Type: application/json
+x-org-id: 1
 
-{"name":
+{
+  "status": "qualified"
+}
+
+### G5. Try to delete organization 2's lead as organization 1
+# Expected: 404
+DELETE {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
+x-org-id: 1
+
+### G6. Confirm organization 2's lead still exists
+# Expected: 200, and status should not have been changed by G4
+GET {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
+x-org-id: 2
 
 
-### 14. Request an unknown route
-GET http://localhost:3000/unknown-route
+### ==================================================
+### H. REQUEST PARSING AND ROUTING
+### ==================================================
+
+### H1. Malformed JSON — should return 400
+POST {{baseUrl}}/leads
+Content-Type: application/json
+x-org-id: 1
+
+{
+  "name": "Broken JSON",
+  "email": "broken@example.com",
+  "company": "Test Company",
+
+### H2. Unknown route — should return 404
+GET {{baseUrl}}/this-route-does-not-exist
+
+
+

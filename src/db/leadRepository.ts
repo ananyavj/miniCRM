@@ -53,3 +53,72 @@ export async function findLeadById(
 
     return mapLeadRow(result.rows[0]!);
 }
+
+type createLeadInput = Pick<
+    Lead,
+    "name" | "email" | "company"
+    > & {
+        phone ?: string;
+    };
+
+export async function createLead(
+    organizationId : number,
+    input : createLeadInput
+) : Promise<Lead> {
+    const result = await pool.query<LeadRow>(
+          `INSERT INTO leads (
+            organization_id,
+            name,
+            email,
+            company,
+            phone
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, email, company, phone, status`,
+        [
+            organizationId,
+            input.name,
+            input.email,
+            input.company,
+            input.phone ?? null
+        ]
+    );
+
+    return mapLeadRow(result.rows[0]!);
+}
+
+export async function updateLeadStatus(
+    organizationId: number,
+    id: number,
+    status: LeadStatus
+) : Promise<Lead | undefined> {
+    const result = await pool.query<LeadRow>(
+        `UPDATE leads
+         SET status = $3
+         WHERE id = $1 AND organization_id = $2
+         RETURNING id, name, email, company, phone, status`,
+        [id, organizationId, status]
+    );
+
+    const row = result.rows[0];
+
+    if(!row){
+        return undefined;
+    }
+
+    return mapLeadRow(row);
+}
+
+export async function deleteLead(
+    organizationId : number,
+    id : number
+) : Promise<boolean> {
+    const result = await pool.query(
+        `DELETE FROM leads
+         WHERE id = $1 AND organization_id = $2`,
+        [id, organizationId]
+    );
+
+    return result.rowCount === 1;
+}
+
