@@ -20,26 +20,24 @@ describe("MiniCRM API", () => {
         const databaseName = new URL(databaseUrl).pathname.slice(1);
 
         if (databaseName !== "minicrm_test") {
-            throw new Error(
-                `Refusing to reset database "${databaseName}"`
-            );
+            throw new Error(`Refusing to reset database "${databaseName}"`);
         }
 
         await pool.query(
-            "TRUNCATE TABLE leads, users, organizations RESTART IDENTITY CASCADE"
+            "TRUNCATE TABLE leads, users, organizations RESTART IDENTITY CASCADE",
         );
 
         await pool.query(
             `INSERT INTO organizations (name)
              VALUES ('Test Organization Alpha'),
-                    ('Test Organization Beta')`
+                    ('Test Organization Beta')`,
         );
 
         await pool.query(
             `INSERT INTO users (organization_id, name, email)
             VALUES
                 (1, 'Alice', 'alice@alpha.example.com'),
-                (2, 'Bob', 'bob@beta.example.com')`
+                (2, 'Bob', 'bob@beta.example.com')`,
         );
     });
 
@@ -47,10 +45,9 @@ describe("MiniCRM API", () => {
         await pool.end();
     });
 
-    
     it("connects to the test database", async () => {
         const result = await pool.query(
-            "SELECT current_database() AS database_name"
+            "SELECT current_database() AS database_name",
         );
 
         expect(result.rows[0].database_name).toBe("minicrm_test");
@@ -69,7 +66,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(200);
         expect(response.body).toEqual({
             status: "ok",
-            database: "connected"
+            database: "connected",
         });
     });
 
@@ -89,35 +86,28 @@ describe("MiniCRM API", () => {
 
             expect(response.status).toBe(400);
             expect(response.body.error.code).toBe("INVALID_ORG_ID");
-        }
+        },
     );
 
     it("returns an empty list for a new organization", async () => {
-        const response = await request(app)
-            .get("/leads")
-            .set(org1);
+        const response = await request(app).get("/leads").set(org1);
 
         expect(response.status).toBe(200);
         expect(response.body).toEqual([]);
     });
 
     it("returns 404 for a missing lead", async () => {
-        const response = await request(app)
-            .get("/leads/999999")
-            .set(org1);
+        const response = await request(app).get("/leads/999999").set(org1);
 
         expect(response.status).toBe(404);
     });
 
     it("creates a lead and returns 201", async () => {
-        const response = await request(app)
-            .post("/leads")
-            .set(org1)
-            .send({
-                name: "Test Lead",
-                email: "testlead@example.com",
-                company: "Test Company"
-            });
+        const response = await request(app).post("/leads").set(org1).send({
+            name: "Test Lead",
+            email: "testlead@example.com",
+            company: "Test Company",
+        });
 
         expect(response.status).toBe(201);
         expect(response.body.name).toBe("Test Lead");
@@ -129,7 +119,7 @@ describe("MiniCRM API", () => {
         const lead = {
             name: "First Lead",
             email: "duplicate@example.com",
-            company: "Test Company"
+            company: "Test Company",
         };
 
         const firstResponse = await request(app)
@@ -144,50 +134,43 @@ describe("MiniCRM API", () => {
             .set(org1)
             .send({
                 ...lead,
-                name: "Second Lead"
+                name: "Second Lead",
             });
 
         expect(duplicateResponse.status).toBe(409);
         expect(duplicateResponse.body.error.code).toBe("DUPLICATE_EMAIL");
-        expect(duplicateResponse.body.error.message).not.toContain("leads_organization_email_unique");
+        expect(duplicateResponse.body.error.message).not.toContain(
+            "leads_organization_email_unique",
+        );
     });
 
     it("rejects an invalid email", async () => {
-        const response = await request(app)
-            .post("/leads")
-            .set(org1)
-            .send({
-                name: "Invalid Lead",
-                email: "not-an-email",
-                company: "Test Company"
-            });
+        const response = await request(app).post("/leads").set(org1).send({
+            name: "Invalid Lead",
+            email: "not-an-email",
+            company: "Test Company",
+        });
 
         expect(response.status).toBe(400);
     });
 
     it("rejects blank names", async () => {
-        const response = await request(app)
-            .post("/leads")
-            .set(org1)
-            .send({
-                name: "   ",
-                email: "blank@example.com",
-                company: "Test Company"
-            });
+        const response = await request(app).post("/leads").set(org1).send({
+            name: "   ",
+            email: "blank@example.com",
+            company: "Test Company",
+        });
 
         expect(response.status).toBe(400);
     });
 
     it("rejects unknown fields when creating a lead", async () => {
-        const response = await request(app)
-            .post("/leads")
-            .set(org1)
-            .send({
-                name: "Test Lead",
-                email: "unknown@example.com",
-                company: "Test Company",
-                unexpectedField: "not allowed"
-            });
+        const response = await request(app).post("/leads").set(org1).send({
+            name: "Test Lead",
+            email: "unknown@example.com",
+            company: "Test Company",
+            unexpectedField: "not allowed",
+        });
 
         expect(response.status).toBe(400);
         expect(response.body.error.code).toBe("VALIDATION_ERROR");
@@ -196,13 +179,11 @@ describe("MiniCRM API", () => {
     it.each(["abc", "1.5", "-1", "0"])(
         "rejects invalid lead ID: %s",
         async (id) => {
-            const response = await request(app)
-                .get(`/leads/${id}`)
-                .set(org1);
+            const response = await request(app).get(`/leads/${id}`).set(org1);
 
             expect(response.status).toBe(400);
             expect(response.body.error.code).toBe("VALIDATION_ERROR");
-        }
+        },
     );
 
     it("rejects an invalid lead status", async () => {
@@ -215,202 +196,182 @@ describe("MiniCRM API", () => {
         expect(response.body.error.code).toBe("VALIDATION_ERROR");
     });
     it("maps a PostgreSQL status constraint violation to 400", async () => {
-    await expect(
-        pool.query(
-            `INSERT INTO leads
+        await expect(
+            pool.query(
+                `INSERT INTO leads
                 (name, email, company, status, organization_id)
              VALUES ($1, $2, $3, $4, $5)`,
-            [
-                "Invalid Status Lead",
-                "invalid-status@example.com",
-                "Test Company",
-                "pending",
-                1
-            ]
-        )
-    ).rejects.toMatchObject({
-        code: "23514",
-        constraint: "leads_status_check"
+                [
+                    "Invalid Status Lead",
+                    "invalid-status@example.com",
+                    "Test Company",
+                    "pending",
+                    1,
+                ],
+            ),
+        ).rejects.toMatchObject({
+            code: "23514",
+            constraint: "leads_status_check",
         });
     });
 
     it("rejects a lead with a nonexistent organization in PostgreSQL", async () => {
-    await expect(
-        pool.query(
-            `INSERT INTO leads
+        await expect(
+            pool.query(
+                `INSERT INTO leads
                 (name, email, company, organization_id)
              VALUES ($1, $2, $3, $4)`,
-            [
-                "Invalid Organization Lead",
-                "invalid-org@example.com",
-                "Test Company",
-                999999
-            ]
-        )
-    ).rejects.toMatchObject({
-        code: "23503",
-        constraint: "leads_organization_id_fkey"
+                [
+                    "Invalid Organization Lead",
+                    "invalid-org@example.com",
+                    "Test Company",
+                    999999,
+                ],
+            ),
+        ).rejects.toMatchObject({
+            code: "23503",
+            constraint: "leads_organization_id_fkey",
         });
     });
 
-
     it("assigns a lead to a user in the same organization", async () => {
-    const created = await request(app)
-        .post("/leads")
-        .set(org1)
-        .send({
+        const created = await request(app).post("/leads").set(org1).send({
             name: "Assignment Test",
             email: "assignment@example.com",
-            company: "Test Company"
+            company: "Test Company",
         });
 
-    expect(created.status).toBe(201);
+        expect(created.status).toBe(201);
 
-    const response = await request(app)
-        .patch(`/leads/${created.body.id}/assignment`)
-        .set(org1)
-        .send({ userId: 1 });
+        const response = await request(app)
+            .patch(`/leads/${created.body.id}/assignment`)
+            .set(org1)
+            .send({ userId: 1 });
 
-    expect(response.status).toBe(200);
-    expect(response.body.assignedTo).toBe(1);
+        expect(response.status).toBe(200);
+        expect(response.body.assignedTo).toBe(1);
 
-    const result = await pool.query(
-        "SELECT assigned_to FROM leads WHERE id = $1",
-        [created.body.id]
-    );
+        const result = await pool.query(
+            "SELECT assigned_to FROM leads WHERE id = $1",
+            [created.body.id],
+        );
 
-    expect(result.rows[0].assigned_to).toBe(1);
-});
+        expect(result.rows[0].assigned_to).toBe(1);
+    });
 
-
-it("rolls back database changes when a transaction fails", async () => {
-    const created = await request(app)
-        .post("/leads")
-        .set(org1)
-        .send({
+    it("rolls back database changes when a transaction fails", async () => {
+        const created = await request(app).post("/leads").set(org1).send({
             name: "Rollback Test",
             email: "rollback@example.com",
-            company: "Test Company"
+            company: "Test Company",
         });
 
-    expect(created.status).toBe(201);
+        expect(created.status).toBe(201);
 
-    await expect(
-        withTransaction(async (client) => {
-            await client.query(
-                "UPDATE leads SET assigned_to = $1 WHERE id = $2",
-                [1, created.body.id]
-            );
-
-            // Simulate a failure after the database has changed.
-            throw new Error("Simulated transaction failure");
-        })
-    ).rejects.toThrow("Simulated transaction failure");
-
-    const result = await pool.query(
-        "SELECT assigned_to FROM leads WHERE id = $1",
-        [created.body.id]
-    );
-
-    expect(result.rows[0].assigned_to).toBeNull();
-});
-
-
-it("discards the connection when rollback fails", async () => {
-    const rollbackError = new Error("Rollback failed");
-
-    const fakeClient = {
-        query: vi.fn(async (sql: string) => {
-            if (sql === "ROLLBACK") {
-                throw rollbackError;
-            }
-
-            return { rows: [], rowCount: 0 };
-        }),
-        release: vi.fn()
-    };
-
-    const connectSpy = vi
-        .spyOn(pool, "connect")
-        .mockResolvedValue(fakeClient as never);
-
-    try {
         await expect(
-            withTransaction(async () => {
-                throw new Error("Original operation failed");
-            })
-        ).rejects.toThrow("Original operation failed");
+            withTransaction(async (client) => {
+                await client.query(
+                    "UPDATE leads SET assigned_to = $1 WHERE id = $2",
+                    [1, created.body.id],
+                );
 
-        expect(fakeClient.query).toHaveBeenCalledWith("BEGIN");
-        expect(fakeClient.query).toHaveBeenCalledWith("ROLLBACK");
+                // Simulate a failure after the database has changed.
+                throw new Error("Simulated transaction failure");
+            }),
+        ).rejects.toThrow("Simulated transaction failure");
 
-        expect(fakeClient.release).toHaveBeenCalledTimes(1);
-        expect(fakeClient.release).toHaveBeenCalledWith(
-            expect.any(Error)
+        const result = await pool.query(
+            "SELECT assigned_to FROM leads WHERE id = $1",
+            [created.body.id],
         );
-    } finally {
-        connectSpy.mockRestore();
-    }
-});
 
-it("rejects assigning a lead to a user from another organization", async () => {
-    const created = await request(app)
-        .post("/leads")
-        .set(org1)
-        .send({
+        expect(result.rows[0].assigned_to).toBeNull();
+    });
+
+    it("discards the connection when rollback fails", async () => {
+        const rollbackError = new Error("Rollback failed");
+
+        const fakeClient = {
+            query: vi.fn(async (sql: string) => {
+                if (sql === "ROLLBACK") {
+                    throw rollbackError;
+                }
+
+                return { rows: [], rowCount: 0 };
+            }),
+            release: vi.fn(),
+        };
+
+        const connectSpy = vi
+            .spyOn(pool, "connect")
+            .mockResolvedValue(fakeClient as never);
+
+        try {
+            await expect(
+                withTransaction(async () => {
+                    throw new Error("Original operation failed");
+                }),
+            ).rejects.toThrow("Original operation failed");
+
+            expect(fakeClient.query).toHaveBeenCalledWith("BEGIN");
+            expect(fakeClient.query).toHaveBeenCalledWith("ROLLBACK");
+
+            expect(fakeClient.release).toHaveBeenCalledTimes(1);
+            expect(fakeClient.release).toHaveBeenCalledWith(expect.any(Error));
+        } finally {
+            connectSpy.mockRestore();
+        }
+    });
+
+    it("rejects assigning a lead to a user from another organization", async () => {
+        const created = await request(app).post("/leads").set(org1).send({
             name: "Cross-Organization Test",
             email: "cross-org@example.com",
-            company: "Test Company"
+            company: "Test Company",
         });
 
-    expect(created.status).toBe(201);
+        expect(created.status).toBe(201);
 
-    const response = await request(app)
-        .patch(`/leads/${created.body.id}/assignment`)
-        .set(org1)
-        .send({ userId: 2 });
+        const response = await request(app)
+            .patch(`/leads/${created.body.id}/assignment`)
+            .set(org1)
+            .send({ userId: 2 });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
 
-    const result = await pool.query(
-        "SELECT assigned_to FROM leads WHERE id = $1",
-        [created.body.id]
-    );
+        const result = await pool.query(
+            "SELECT assigned_to FROM leads WHERE id = $1",
+            [created.body.id],
+        );
 
-    expect(result.rows[0].assigned_to).toBeNull();
-});
+        expect(result.rows[0].assigned_to).toBeNull();
+    });
 
-it("rejects assigning a nonexistent user", async () => {
-    const created = await request(app)
-        .post("/leads")
-        .set(org1)
-        .send({
+    it("rejects assigning a nonexistent user", async () => {
+        const created = await request(app).post("/leads").set(org1).send({
             name: "Missing User Test",
             email: "missing-user@example.com",
-            company: "Test Company"
+            company: "Test Company",
         });
 
-    expect(created.status).toBe(201);
+        expect(created.status).toBe(201);
 
-    const response = await request(app)
-        .patch(`/leads/${created.body.id}/assignment`)
-        .set(org1)
-        .send({ userId: 999999 });
+        const response = await request(app)
+            .patch(`/leads/${created.body.id}/assignment`)
+            .set(org1)
+            .send({ userId: 999999 });
 
         expect(response.status).toBe(400);
         expect(response.body.error.code).toBe("VALIDATION_ERROR");
     });
 
     it("updates a lead status", async () => {
-        const created = await request(app)
-            .post("/leads")
-            .set(org1)
-            .send({
-                name: "Update Test",
-                email: "update@example.com",
-                company: "Test Company"
-            });
+        const created = await request(app).post("/leads").set(org1).send({
+            name: "Update Test",
+            email: "update@example.com",
+            company: "Test Company",
+        });
 
         expect(created.status).toBe(201);
 
@@ -424,14 +385,11 @@ it("rejects assigning a nonexistent user", async () => {
     });
 
     it("deletes an existing lead and returns 204", async () => {
-        const created = await request(app)
-            .post("/leads")
-            .set(org1)
-            .send({
-                name: "Delete Test",
-                email: "delete@example.com",
-                company: "Test Company"
-            });
+        const created = await request(app).post("/leads").set(org1).send({
+            name: "Delete Test",
+            email: "delete@example.com",
+            company: "Test Company",
+        });
 
         expect(created.status).toBe(201);
 
@@ -460,7 +418,7 @@ it("rejects assigning a nonexistent user", async () => {
             .send({
                 name: "A".repeat(110 * 1024),
                 email: "large@example.com",
-                company: "Test Company"
+                company: "Test Company",
             });
 
         expect(response.status).toBe(413);
@@ -475,14 +433,11 @@ it("rejects assigning a nonexistent user", async () => {
     });
 
     it("does not allow one organization to read another organization's lead", async () => {
-        const created = await request(app)
-            .post("/leads")
-            .set(org2)
-            .send({
-                name: "Organization Beta Lead",
-                email: "beta@example.com",
-                company: "Beta Company"
-            });
+        const created = await request(app).post("/leads").set(org2).send({
+            name: "Organization Beta Lead",
+            email: "beta@example.com",
+            company: "Beta Company",
+        });
 
         expect(created.status).toBe(201);
 
@@ -494,14 +449,11 @@ it("rejects assigning a nonexistent user", async () => {
     });
 
     it("does not allow one organization to update another organization's lead", async () => {
-        const created = await request(app)
-            .post("/leads")
-            .set(org2)
-            .send({
-                name: "Organization Beta Lead",
-                email: "beta-update@example.com",
-                company: "Beta Company"
-            });
+        const created = await request(app).post("/leads").set(org2).send({
+            name: "Organization Beta Lead",
+            email: "beta-update@example.com",
+            company: "Beta Company",
+        });
 
         expect(created.status).toBe(201);
 
@@ -521,14 +473,11 @@ it("rejects assigning a nonexistent user", async () => {
     });
 
     it("does not allow one organization to delete another organization's lead", async () => {
-        const created = await request(app)
-            .post("/leads")
-            .set(org2)
-            .send({
-                name: "Organization Beta Lead",
-                email: "beta-delete@example.com",
-                company: "Beta Company"
-            });
+        const created = await request(app).post("/leads").set(org2).send({
+            name: "Organization Beta Lead",
+            email: "beta-delete@example.com",
+            company: "Beta Company",
+        });
 
         expect(created.status).toBe(201);
 
@@ -546,35 +495,32 @@ it("rejects assigning a nonexistent user", async () => {
     });
 
     it("enforces same-organization assignment in PostgreSQL", async () => {
-    const created = await request(app)
-        .post("/leads")
-        .set(org1)
-        .send({
+        const created = await request(app).post("/leads").set(org1).send({
             name: "Database Constraint Test",
             email: "db-constraint@example.com",
-            company: "Test Company"
+            company: "Test Company",
         });
 
-    expect(created.status).toBe(201);
+        expect(created.status).toBe(201);
 
-    await expect(
-        pool.query(
-            `UPDATE leads
+        await expect(
+            pool.query(
+                `UPDATE leads
              SET assigned_to = $1
              WHERE id = $2 AND organization_id = $3`,
-            [2, created.body.id, 1]
-        )
-    ).rejects.toMatchObject({
-        code: "23503",
-        constraint: "leads_assigned_to_org_fkey"
-    });
+                [2, created.body.id, 1],
+            ),
+        ).rejects.toMatchObject({
+            code: "23503",
+            constraint: "leads_assigned_to_org_fkey",
+        });
 
-    const result = await pool.query(
-        "SELECT assigned_to FROM leads WHERE id = $1",
-        [created.body.id]
-    );
+        const result = await pool.query(
+            "SELECT assigned_to FROM leads WHERE id = $1",
+            [created.body.id],
+        );
 
-    expect(result.rows[0].assigned_to).toBeNull();
+        expect(result.rows[0].assigned_to).toBeNull();
     });
 
     // Sends a given error through the real errorHandler, with no database involved.
@@ -595,7 +541,7 @@ it("rejects assigning a nonexistent user", async () => {
         ["23514", "leads_email_check", 400, "VALIDATION_ERROR"],
         ["23503", "leads_assigned_to_org_fkey", 400, "INVALID_ASSIGNEE"],
         ["23503", "leads_organization_id_fkey", 400, "INVALID_REFERENCE"],
-        ["23502", "leads_name_key", 400, "REQUIRED_FIELD_MISSING"]
+        ["23502", "leads_name_key", 400, "REQUIRED_FIELD_MISSING"],
     ])(
         "errorHandler maps PostgreSQL %s (%s) to %i %s",
         async (code, constraint, status, errorCode) => {
@@ -604,7 +550,7 @@ it("rejects assigning a nonexistent user", async () => {
             expect(response.status).toBe(status);
             expect(response.body.error.code).toBe(errorCode);
             expect(response.body.error.message).not.toContain(constraint);
-        }
+        },
     );
 
     it("errorHandler returns a generic 500 for an unknown error", async () => {
@@ -614,13 +560,13 @@ it("rejects assigning a nonexistent user", async () => {
 
         try {
             const response = await responseForError(
-                new Error("secret internal detail")
+                new Error("secret internal detail"),
             );
 
             expect(response.status).toBe(500);
             expect(response.body.error.code).toBe("INTERNAL_SERVER_ERROR");
             expect(JSON.stringify(response.body)).not.toContain(
-                "secret internal detail"
+                "secret internal detail",
             );
             expect(consoleSpy).toHaveBeenCalled();
         } finally {

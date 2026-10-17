@@ -1,28 +1,25 @@
 //src/services/leadService.ts
-import {type Lead, type LeadStatus} from "../models/lead.js";
-import{
+import { type Lead, type LeadStatus } from "../models/lead.js";
+import {
     listLeadsByOrg,
     findLeadById,
     createLead as createLeadInDb,
     updateLeadStatus as updateLeadStatusInDb,
     deleteLead as deleteLeadInDb,
-    assignLeadToUser
+    assignLeadToUser,
 } from "../db/leadRepository.js";
-import {
-  NotFoundError,
-  ValidationError,
-} from "../errors.js";
+import { NotFoundError, ValidationError } from "../errors.js";
 
-export async function getLeadById(organizationId :  number, id: number): Promise<Lead> {
-    
-  const leadObj = await findLeadById(organizationId, id);
-  if(!leadObj)
-  {
-    throw new NotFoundError(`Lead with ID ${id} not found.`);
-  }
-  return leadObj;
+export async function getLeadById(
+    organizationId: number,
+    id: number,
+): Promise<Lead> {
+    const leadObj = await findLeadById(organizationId, id);
+    if (!leadObj) {
+        throw new NotFoundError(`Lead with ID ${id} not found.`);
+    }
+    return leadObj;
 }
-
 
 type CreateLeadInput = {
     name: string;
@@ -33,11 +30,11 @@ type CreateLeadInput = {
 
 export async function createLead(
     organizationId: number,
-    input: CreateLeadInput
+    input: CreateLeadInput,
 ): Promise<Lead> {
     if (input.name.trim() === "") {
         throw new ValidationError(
-            "Name needs to be at least 1 character long."
+            "Name needs to be at least 1 character long.",
         );
     }
 
@@ -47,41 +44,40 @@ export async function createLead(
 
     return createLeadInDb(organizationId, input);
 }
-export async function updateLeadStatus( 
+export async function updateLeadStatus(
     organizationId: number,
     id: number,
-    status: LeadStatus): Promise<Lead> {  
-      const lead =  await updateLeadStatusInDb(organizationId, id, status);
-      if(!lead)
-      {
+    status: LeadStatus,
+): Promise<Lead> {
+    const lead = await updateLeadStatusInDb(organizationId, id, status);
+    if (!lead) {
         throw new NotFoundError(`Lead with ID ${id} not found.`);
-      }
+    }
 
-      return lead;   
+    return lead;
 }
 
 export async function deleteLead(
-  organizationId : number,
-  id : number
+    organizationId: number,
+    id: number,
 ): Promise<void> {
-    
-  const deleted = await deleteLeadInDb(organizationId, id);
-  if (!deleted) {
-    throw new NotFoundError(`Lead with ID ${id} couldn't be deleted`);
-  }
-
+    const deleted = await deleteLeadInDb(organizationId, id);
+    if (!deleted) {
+        throw new NotFoundError(`Lead with ID ${id} couldn't be deleted`);
+    }
 }
 
-export async function listLeads(organizationId : number,
-    status? : LeadStatus): Promise<Lead[]> {
+export async function listLeads(
+    organizationId: number,
+    status?: LeadStatus,
+): Promise<Lead[]> {
     return listLeadsByOrg(organizationId, status);
 }
 
 export async function assignLead(
-  organizationId : number,
-  leadId : number,
-  userId : number
-) : Promise<Lead> {
-  return assignLeadToUser(organizationId, leadId, userId);
+    organizationId: number,
+    leadId: number,
+    userId: number,
+): Promise<Lead> {
+    return assignLeadToUser(organizationId, leadId, userId);
 }
-

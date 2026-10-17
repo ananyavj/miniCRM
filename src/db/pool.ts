@@ -1,7 +1,7 @@
 //src/db/pool.ts
-import  { Pool } from "pg";
+import { Pool } from "pg";
 import { config } from "../config.js";
 
 export const pool = new Pool({
-    connectionString : config.DATABASE_URL
+    connectionString: config.DATABASE_URL,
 });

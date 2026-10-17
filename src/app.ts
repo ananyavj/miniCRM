@@ -1,15 +1,15 @@
 //src/app.ts
-import express , { type ErrorRequestHandler } from "express";
-import leadRoutes from "./routes/leadRoutes.js"
+import express, { type ErrorRequestHandler } from "express";
+import leadRoutes from "./routes/leadRoutes.js";
 import { NotFoundError, DuplicateIdError, ValidationError } from "./errors.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";
-import {pool} from "./db/pool.js";
+import { pool } from "./db/pool.js";
 
 const app = express();
 
 app.use(requestLogger);
-app.use(express.json({"limit" : "100kb"}));
+app.use(express.json({ limit: "100kb" }));
 app.use("/leads", leadRoutes);
 
 app.get("/health", (req, res) => {
@@ -21,25 +21,22 @@ app.get("/health/db", async (req, res) => {
 
         res.status(200).json({
             status: "ok",
-            database: "connected"
+            database: "connected",
         });
-    }
-    catch(error){
+    } catch (error) {
         console.error("Database Health Check Failed", error);
 
-         res.status(503).json({
+        res.status(503).json({
             status: "error",
-            database: "unavailable"
+            database: "unavailable",
         });
     }
-})
+});
 
-function isPostgresError(
-    err : unknown
-) : err is {
-    code : string;
-    constraint? : string
-}{
+function isPostgresError(err: unknown): err is {
+    code: string;
+    constraint?: string;
+} {
     return (
         typeof err === "object" &&
         err !== null &&
@@ -48,19 +45,19 @@ function isPostgresError(
     );
 }
 
-export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
-    if(
+export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+    if (
         typeof err === "object" &&
-        err !== null && "type" in err &&
+        err !== null &&
+        "type" in err &&
         err.type === "entity.parse.failed"
-    )
-    {
+    ) {
         res.status(400).json({
             error: {
-                code : "INVALID_JSON",
-                message : "Request body contains invalid JSON",
-                details : []
-            } 
+                code: "INVALID_JSON",
+                message: "Request body contains invalid JSON",
+                details: [],
+            },
         });
         return;
     }
@@ -74,8 +71,8 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
             error: {
                 code: "BODY_TOO_LARGE",
                 message: "Request body is too large",
-                details: []
-            }
+                details: [],
+            },
         });
         return;
     }
@@ -85,11 +82,11 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
             error: {
                 code: "VALIDATION_ERROR",
                 message: "Request validation failed",
-                details: err.issues.map(issue => ({
+                details: err.issues.map((issue) => ({
                     field: issue.path.join("."),
-                    message: issue.message
-                }))
-            }
+                    message: issue.message,
+                })),
+            },
         });
         return;
     }
@@ -99,8 +96,8 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
             error: {
                 code: "NOT_FOUND",
                 message: err.message,
-                details: []
-            }
+                details: [],
+            },
         });
         return;
     }
@@ -110,8 +107,8 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
             error: {
                 code: "VALIDATION_ERROR",
                 message: err.message,
-                details: []
-            }
+                details: [],
+            },
         });
         return;
     }
@@ -121,57 +118,54 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
             error: {
                 code: "DUPLICATE_ID",
                 message: err.message,
-                details: []
-            }
+                details: [],
+            },
         });
         return;
     }
 
-    if(isPostgresError(err)){
-        const{code, constraint} = err;
+    if (isPostgresError(err)) {
+        const { code, constraint } = err;
 
-        if(
+        if (
             code === "23505" &&
             constraint === "leads_organization_email_unique"
-        ){
+        ) {
             res.status(409).json({
-                 error: {
+                error: {
                     code: "DUPLICATE_EMAIL",
-                    message: "A lead with this email already exists in this organization.",
-                    details: []
-                 }
+                    message:
+                        "A lead with this email already exists in this organization.",
+                    details: [],
+                },
             });
             return;
         }
 
-         if (
-        code === "23514" &&
-        constraint === "leads_status_check"
-        ) {
+        if (code === "23514" && constraint === "leads_status_check") {
             res.status(400).json({
                 error: {
                     code: "INVALID_LEAD_STATUS",
-                    message: "Lead status must be new, contacted, qualified, or lost.",
-                    details: []
-                }
+                    message:
+                        "Lead status must be new, contacted, qualified, or lost.",
+                    details: [],
+                },
             });
             return;
         }
 
         if (
             code === "23514" &&
-            (
-                constraint === "leads_name_not_blank" ||
+            (constraint === "leads_name_not_blank" ||
                 constraint === "leads_company_not_blank" ||
-                constraint === "leads_email_check"
-            )
+                constraint === "leads_email_check")
         ) {
             res.status(400).json({
                 error: {
                     code: "VALIDATION_ERROR",
                     message: "Lead data violates a validation rule.",
-                    details: []
-                }
+                    details: [],
+                },
             });
             return;
         }
@@ -188,8 +182,8 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
                     message: isAssignmentError
                         ? "The assigned user does not exist."
                         : "A referenced record does not exist.",
-                    details: []
-                }
+                    details: [],
+                },
             });
             return;
         }
@@ -199,8 +193,8 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
                 error: {
                     code: "REQUIRED_FIELD_MISSING",
                     message: "A required field is missing.",
-                    details: []
-                }
+                    details: [],
+                },
             });
             return;
         }
@@ -210,20 +204,19 @@ export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
         error: {
             code: "INTERNAL_SERVER_ERROR",
             message: "Internal server error",
-            details: []
-        }
+            details: [],
+        },
     });
-}
+};
 app.use(errorHandler);
-
 
 app.use((req, res) => {
     res.status(404).json({
         error: {
             code: "ROUTE_NOT_FOUND",
             message: "Route not found",
-            details: []
-        }
+            details: [],
+        },
     });
 });
 
