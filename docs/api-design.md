@@ -35,7 +35,7 @@ This header is a temporary development mechanism. It is not authentication and m
 
 The request schema requires `userId` to be a positive integer and rejects unexpected fields.
 
-**Success response:** HTTP `200 OK`. The response contains the updated lead, including its existing lead fields. The assignment is stored in the database's `assigned_to` column.
+**Success response:** HTTP `200 OK`. The response contains the updated lead, including `assignedTo` (the user ID, or `null` if unassigned). The assignment is stored in the database's `assigned_to` column. All lead responses include `assignedTo`.
 
 **Validation and authorization rules:**
 
@@ -46,7 +46,7 @@ The request schema requires `userId` to be a positive integer and rejects unexpe
 - The assignment operation runs inside a PostgreSQL transaction.
 - If the lead or user cannot be found within the required organization, the assignment is rejected.
 
-The database transaction ensures that a failed assignment does not leave a partially completed update.
+The transaction ensures that a failed assignment does not leave a partially completed update.
 
 ## 2. Error Handling
 
@@ -54,6 +54,7 @@ The application uses centralized Express error-handling middleware to translate 
 
 | Error condition | HTTP status | Response code |
 |---|---:|---|
+| Missing or invalid `x-org-id` header | 400 | `INVALID_ORG_ID` |
 | Invalid request data detected by Zod | 400 | `VALIDATION_ERROR` |
 | Invalid JSON body | 400 | `INVALID_JSON` |
 | Invalid lead data rejected by service logic | 400 | `VALIDATION_ERROR` |
@@ -70,11 +71,11 @@ The application uses centralized Express error-handling middleware to translate 
 | Unexpected server error | 500 | `INTERNAL_SERVER_ERROR` |
 | Database unavailable during health check | 503 | Database health response indicates unavailability |
 
-The database error mappings are based on PostgreSQL SQLSTATE codes and, where necessary, constraint names. Unknown PostgreSQL errors fall through to the generic server-error response.
+Database error mappings use PostgreSQL SQLSTATE codes and, where necessary, constraint names. Unknown PostgreSQL errors fall through to the generic server-error response.
 
-Not every mapping has yet been independently tested through an HTTP request. The duplicate-email HTTP response and selected PostgreSQL constraint errors have been tested; additional HTTP-level coverage remains pending.
+Every error shape is `{ "error": { "code", "message", "details" } }`, including the organization-header error. Each PostgreSQL error branch (23505, 23514, 23503 for both `INVALID_ASSIGNEE` and `INVALID_REFERENCE`, 23502) and the generic 500 are tested by sending an error directly through the exported `errorHandler`.
 
-For HTTP `500` responses, the API returns a generic error message instead of exposing raw SQL messages, stack traces or internal implementation details.
+For HTTP `500` responses, the API returns a generic error message instead of exposing raw SQL messages, stack traces, or internal implementation details.
 
 ## 3. Request and Response Flow
 
@@ -82,11 +83,11 @@ For HTTP `500` responses, the API returns a generic error message instead of exp
 2. Express middleware processes the request in registration order.
 3. The organization middleware validates the temporary `x-org-id` header for lead routes.
 4. Route-specific validation middleware validates request parameters, query parameters or body data using Zod schemas.
-5. The route handler obtains the validated data and organization ID and calls the appropriate service function.
+5. The route handler obtains validated data and the organization ID and calls the appropriate service function.
 6. The service layer applies application rules and calls the database repository.
 7. The repository executes parameterized PostgreSQL queries. Transactional operations use one checked-out database client for all queries in the transaction.
 8. The route handler sends the appropriate HTTP response.
-9. Errors forwarded to the centralized error handler are mapped to consistent HTTP responses.
+9. Errors forwarded to the centralized error handler are mapped to HTTP responses.
 
 ## 4. Validation Responsibilities
 
@@ -114,9 +115,13 @@ PostgreSQL enforces data integrity independently of the Express API.
 
 The schema includes constraints for required fields, lead status, nonblank names and company names, a basic email check, organization relationships and organization-scoped email uniqueness.
 
-The existing `leads_assigned_to_fkey` checks that the assigned user exists, but by itself it does not ensure that the user belongs to the same organization as the lead.
+The `leads` table has a composite foreign key named `leads_assigned_to_org_fkey` on `(assigned_to, organization_id)`, referencing `(id, organization_id)` in `users`.
 
-Application-level assignment logic checks organization membership. A composite foreign key is being considered to enforce this relationship at the database level as well; it should not be described as implemented until the schema change and its tests are complete.
+This prevents a lead from being assigned to a user belonging to another organization, even if a database write bypasses the application's service logic.
+
+The constraint uses `ON DELETE SET NULL (assigned_to)`. When an assigned user is deleted, PostgreSQL clears the assignment without nulling the lead's required `organization_id`.
+
+The application also checks organization membership during assignment. The application-level check provides clear behavior, while the composite foreign key independently protects database integrity.
 
 ## 5. Database Configuration and Transactions
 
@@ -135,7 +140,7 @@ Transactional operations use `src/db/withTransaction.ts`, which:
 
 All queries that must belong to one transaction must use the same `PoolClient`. Using separate `pool.query()` calls inside the transaction would not guarantee that those queries execute within the same transaction.
 
-The normal rollback path has been tested. The rollback-failure connection-disposal path is subject to a separate test.
+Both the normal rollback path and the rollback-failure connection-disposal path have tests in `src/app.test.ts`. The rollback-failure test uses a fake client to exercise the failure path.
 
 ## 6. Current Implementation Status
 
@@ -146,7 +151,10 @@ The normal rollback path has been tested. The rollback-failure connection-dispos
 - The test suite checks cross-organization lead read, update and delete protection.
 - PostgreSQL errors are mapped to controlled HTTP responses for selected constraint violations.
 - The lead-assignment endpoint validates the request and checks that the lead and assigned user belong to the same organization.
-- Lead assignment uses a transaction and has integration tests for successful assignment, cross-organization rejection and nonexistent users.
+- Lead assignment uses a transaction and has tests for successful assignment, cross-organization rejection and nonexistent users.
 - A transaction rollback test verifies that an update is undone when an error occurs after the update.
-- The reported test suite passed 34 tests, and TypeScript typechecking passed after the transaction-helper import correction.
-- The composite foreign key and a test for rollback failure are not yet verified as complete.
+- A rollback-failure test verifies that the connection is discarded when rollback fails.
+- The composite foreign key `leads_assigned_to_org_fkey` enforces same-organization assignment at the database level.
+- The seed file has been corrected and tested against a disposable database; the five sample leads were verified to belong to the demo organization.
+- Test and typecheck results after the latest changes are pending (run `npm run typecheck; npm test`).
+- The existing development and test databases still need to be inspected to confirm that their actual schemas match `src/db/schema.sql`.

@@ -48,7 +48,7 @@ function isPostgresError(
     );
 }
 
-const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
+export const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
     if(
         typeof err === "object" &&
         err !== null && "type" in err &&
@@ -178,7 +178,7 @@ const errorHandler : ErrorRequestHandler = (err, req, res, next) => {
 
         if (code === "23503") {
             const isAssignmentError =
-                constraint === "leads_assigned_to_fkey";
+                constraint === "leads_assigned_to_org_fkey";
 
             res.status(400).json({
                 error: {

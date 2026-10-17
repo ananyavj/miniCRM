@@ -19,8 +19,11 @@ export function requireOrganization(
     if(!result.success)
     {
         res.status(400).json({
-            error: "INVALID_ORG_ID",
-            message: "A valid x-org-id header is required."
+            error: {
+                code: "INVALID_ORG_ID",
+                message: "A valid x-org-id header is required.",
+                details: []
+            }
         });
         return;
     }

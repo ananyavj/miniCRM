@@ -1,3 +1,4 @@
+//src/server.ts
 import myApp from "./app.js"
 
 myApp.listen(3000, () => {

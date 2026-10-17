@@ -1,4 +1,4 @@
-
+-- src/db/schema.sql
 CREATE TABLE IF NOT EXISTS organizations (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name text NOT NULL,

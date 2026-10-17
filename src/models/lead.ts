@@ -7,4 +7,5 @@ export interface Lead {
   phone?: string;
   company: string;
   status: LeadStatus;
+  assignedTo: number | null;
 }

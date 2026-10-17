@@ -13,11 +13,6 @@ import {
   ValidationError,
 } from "../errors.js";
 
-export function describeLead(lead: Lead): string {
-  let sentence: string = `${lead.name} works at ${lead.company}. Status: ${lead.status}`;
-  return sentence;
-}
-
 export async function getLeadById(organizationId :  number, id: number): Promise<Lead> {
     
   const leadObj = await findLeadById(organizationId, id);
@@ -70,8 +65,8 @@ export async function deleteLead(
   id : number
 ): Promise<void> {
     
-  const lead = await deleteLeadInDb(organizationId, id);
-  if (!lead) {
+  const deleted = await deleteLeadInDb(organizationId, id);
+  if (!deleted) {
     throw new NotFoundError(`Lead with ID ${id} couldn't be deleted`);
   }
 

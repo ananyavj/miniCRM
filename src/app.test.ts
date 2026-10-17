@@ -1,7 +1,8 @@
 //src/app.test.ts
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import request from "supertest";
-import app from "./app.js";
+import express from "express";
+import app, { errorHandler } from "./app.js";
 import { pool } from "./db/pool.js";
 import { withTransaction } from "./db/withTransaction.js";
 
@@ -76,7 +77,7 @@ describe("MiniCRM API", () => {
         const response = await request(app).get("/leads");
 
         expect(response.status).toBe(400);
-        expect(response.body.error).toBe("INVALID_ORG_ID");
+        expect(response.body.error.code).toBe("INVALID_ORG_ID");
     });
 
     it.each(["abc", "0", "-1", "1.5"])(
@@ -87,7 +88,7 @@ describe("MiniCRM API", () => {
                 .set("x-org-id", organizationId);
 
             expect(response.status).toBe(400);
-            expect(response.body.error).toBe("INVALID_ORG_ID");
+            expect(response.body.error.code).toBe("INVALID_ORG_ID");
         }
     );
 
@@ -271,6 +272,7 @@ describe("MiniCRM API", () => {
         .send({ userId: 1 });
 
     expect(response.status).toBe(200);
+    expect(response.body.assignedTo).toBe(1);
 
     const result = await pool.query(
         "SELECT assigned_to FROM leads WHERE id = $1",
@@ -573,5 +575,56 @@ it("rejects assigning a nonexistent user", async () => {
     );
 
     expect(result.rows[0].assigned_to).toBeNull();
+    });
+
+    // Sends a given error through the real errorHandler, with no database involved.
+    async function responseForError(error: unknown) {
+        const testApp = express();
+        testApp.get("/boom", (req, res, next) => {
+            next(error);
+        });
+        testApp.use(errorHandler);
+        return request(testApp).get("/boom");
+    }
+
+    it.each([
+        ["23505", "leads_organization_email_unique", 409, "DUPLICATE_EMAIL"],
+        ["23514", "leads_status_check", 400, "INVALID_LEAD_STATUS"],
+        ["23514", "leads_name_not_blank", 400, "VALIDATION_ERROR"],
+        ["23514", "leads_company_not_blank", 400, "VALIDATION_ERROR"],
+        ["23514", "leads_email_check", 400, "VALIDATION_ERROR"],
+        ["23503", "leads_assigned_to_org_fkey", 400, "INVALID_ASSIGNEE"],
+        ["23503", "leads_organization_id_fkey", 400, "INVALID_REFERENCE"],
+        ["23502", "leads_name_key", 400, "REQUIRED_FIELD_MISSING"]
+    ])(
+        "errorHandler maps PostgreSQL %s (%s) to %i %s",
+        async (code, constraint, status, errorCode) => {
+            const response = await responseForError({ code, constraint });
+
+            expect(response.status).toBe(status);
+            expect(response.body.error.code).toBe(errorCode);
+            expect(response.body.error.message).not.toContain(constraint);
+        }
+    );
+
+    it("errorHandler returns a generic 500 for an unknown error", async () => {
+        const consoleSpy = vi
+            .spyOn(console, "error")
+            .mockImplementation(() => {});
+
+        try {
+            const response = await responseForError(
+                new Error("secret internal detail")
+            );
+
+            expect(response.status).toBe(500);
+            expect(response.body.error.code).toBe("INTERNAL_SERVER_ERROR");
+            expect(JSON.stringify(response.body)).not.toContain(
+                "secret internal detail"
+            );
+            expect(consoleSpy).toHaveBeenCalled();
+        } finally {
+            consoleSpy.mockRestore();
+        }
     });
 });

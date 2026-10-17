@@ -11,7 +11,8 @@ type LeadRow = {
     email :string,
     company : string,
     phone : string | null,
-    status : LeadStatus
+    status : LeadStatus,
+    assigned_to : number | null
 };
 
 function mapLeadRow(row : LeadRow) : Lead {
@@ -21,7 +22,8 @@ function mapLeadRow(row : LeadRow) : Lead {
         email :row.email,
         company : row.company,
         ...(row.phone !== null && {phone : row.phone}),
-        status : row.status
+        status : row.status,
+        assignedTo : row.assigned_to
     };
 }
 
@@ -30,7 +32,7 @@ export async function listLeadsByOrg(
     status? : LeadStatus
 ) : Promise<Lead[]> {
     const result = await pool.query<LeadRow>(
-        `SELECT id, name, email, company, phone, status
+        `SELECT id, name, email, company, phone, status, assigned_to
         FROM leads
         WHERE organization_id = $1
             AND ($2 :: text IS NULL OR status = $2)
@@ -45,7 +47,7 @@ export async function findLeadById(
     id: number
 ): Promise<Lead | undefined> {
     const result = await pool.query<LeadRow>(
-        `SELECT id, name, email, company, phone, status
+        `SELECT id, name, email, company, phone, status, assigned_to
          FROM leads
          WHERE organization_id = $1 AND id = $2`,
         [organizationId, id]
@@ -78,7 +80,7 @@ export async function createLead(
             phone
         )
         VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, name, email, company, phone, status`,
+        RETURNING id, name, email, company, phone, status, assigned_to`,
         [
             organizationId,
             input.name,
@@ -100,7 +102,7 @@ export async function updateLeadStatus(
         `UPDATE leads
          SET status = $3
          WHERE id = $1 AND organization_id = $2
-         RETURNING id, name, email, company, phone, status`,
+         RETURNING id, name, email, company, phone, status, assigned_to`,
         [id, organizationId, status]
     );
 
@@ -162,7 +164,7 @@ export async function assignLeadToUser(
             `UPDATE leads
              SET assigned_to = $3
              WHERE id = $1 AND organization_id = $2
-             RETURNING id, name, email, company, phone, status`,
+             RETURNING id, name, email, company, phone, status, assigned_to`,
             [leadId, organizationId, userId]
         );
 
