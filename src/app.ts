@@ -45,7 +45,7 @@ function isPostgresError(err: unknown): err is {
     );
 }
 
-export const errorHandler: ErrorRequestHandler = (err, req, res, next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     if (
         typeof err === "object" &&
         err !== null &&
