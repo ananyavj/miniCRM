@@ -1,3 +1,4 @@
+//src/modules/leads/leads.types.ts
 export type LeadStatus = "new" | "contacted" | "qualified" | "lost";
 
 export interface Lead {

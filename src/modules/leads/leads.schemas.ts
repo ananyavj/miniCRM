@@ -1,3 +1,4 @@
+//src/modules/leads/leads.schemas.ts
 import { z } from "zod";
 const leadStatuses = ["new", "contacted", "qualified", "lost"] as const;
 export const leadStatusSchema = z.enum(leadStatuses);

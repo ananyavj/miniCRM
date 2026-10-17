@@ -1,9 +1,9 @@
-//src/db/leadRepository.ts
+//src/modules/leads/leads.repository.ts
 import type { PoolClient } from "pg";
-import { withTransaction } from "./withTransaction.js";
-import { NotFoundError, ValidationError } from "../errors.js";
-import type { Lead, LeadStatus } from "../models/lead.js";
-import { pool } from "./pool.js";
+import { withTransaction } from "../../db/withTransaction.js";
+import { NotFoundError, ValidationError } from "../../errors.js";
+import type { Lead, LeadStatus } from "./leads.types.js";
+import { pool } from "../../db/pool.js";
 
 type LeadRow = {
     id: number;

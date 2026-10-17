@@ -1,6 +1,6 @@
 //src/app.ts
 import express, { type ErrorRequestHandler } from "express";
-import leadRoutes from "./routes/leadRoutes.js";
+import leadRoutes from "./modules/leads/leads.routes.js";
 import { NotFoundError, DuplicateIdError, ValidationError } from "./errors.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";

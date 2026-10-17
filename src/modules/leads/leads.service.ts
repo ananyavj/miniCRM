@@ -1,5 +1,5 @@
-//src/services/leadService.ts
-import { type Lead, type LeadStatus } from "../models/lead.js";
+//src/modules/leads/leads.service.ts
+import { type Lead, type LeadStatus } from "./leads.types.js";
 import {
     listLeadsByOrg,
     findLeadById,
@@ -7,8 +7,8 @@ import {
     updateLeadStatus as updateLeadStatusInDb,
     deleteLead as deleteLeadInDb,
     assignLeadToUser,
-} from "../db/leadRepository.js";
-import { NotFoundError, ValidationError } from "../errors.js";
+} from "./leads.repository.js";
+import { NotFoundError, ValidationError } from "../../errors.js";
 
 export async function getLeadById(
     organizationId: number,

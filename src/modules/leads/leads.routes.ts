@@ -1,4 +1,4 @@
-//src/routes/leadRoutes.ts
+//src/modules/leads/leads.routes.ts
 import { Router } from "express";
 import {
     listLeads,
@@ -7,16 +7,16 @@ import {
     updateLeadStatus,
     deleteLead,
     assignLead,
-} from "../services/leadService.js";
-import { validate } from "../middleware/validate.js";
+} from "./leads.service.js";
+import { validate } from "../../middleware/validate.js";
 import {
     leadIdSchema,
     listLeadsQuerySchema,
     createLeadSchema,
     updateLeadStatusSchema,
     assignLeadSchema,
-} from "../schemas/leadSchemas.js";
-import { requireOrganization } from "../middleware/organization.js";
+} from "./leads.schemas.js";
+import { requireOrganization } from "../../middleware/organization.js";
 
 const router = Router();
 // TEMP: replaced by token on Day 24
