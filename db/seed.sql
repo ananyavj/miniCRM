@@ -1,4 +1,4 @@
--- src/db/seed.sql
+-- db/seed.sql
 
 
 -- Seed the demo organization.

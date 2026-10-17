@@ -31,7 +31,9 @@ async function main(): Promise<void> {
             "SELECT version FROM schema_migrations",
         );
 
-        const appliedMigrations = new Set(result.rows.map((row) => row.version));
+        const appliedMigrations = new Set(
+            result.rows.map((row) => row.version),
+        );
 
         for (const file of migrationFiles) {
             if (appliedMigrations.has(file)) {
