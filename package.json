@@ -10,7 +10,8 @@
     "test": "vitest run",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "migrate": "tsx src/db/migrate.ts"
   },
   "keywords": [],
   "author": "",

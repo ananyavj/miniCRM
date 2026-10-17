@@ -17,11 +17,13 @@
 
 **Endpoint:** `PATCH /leads/:id/assignment`
 
-**Purpose:** Assigns an existing lead to a user who belongs to the same organization as the lead.
+**Purpose:** Assign an existing lead to a user who belongs to the same organization as the lead.
 
 **Required organization header:**
 
-`x-org-id: 1`
+```http
+x-org-id: 1
+```
 
 This header is a temporary development mechanism. It is not authentication and must eventually be replaced by organization identity derived from trusted authentication context.
 
@@ -35,7 +37,7 @@ This header is a temporary development mechanism. It is not authentication and m
 
 The request schema requires `userId` to be a positive integer and rejects unexpected fields.
 
-**Success response:** HTTP `200 OK`. The response contains the updated lead, including `assignedTo` (the user ID, or `null` if unassigned). The assignment is stored in the database's `assigned_to` column. All lead responses include `assignedTo`.
+**Success response:** HTTP `200 OK`. The response contains the updated lead, including `assignedTo`, which is the user ID or `null` if the lead is unassigned. The assignment is stored in the database's `assigned_to` column. All lead responses include `assignedTo`.
 
 **Validation and authorization rules:**
 
@@ -73,7 +75,19 @@ The application uses centralized Express error-handling middleware to translate 
 
 Database error mappings use PostgreSQL SQLSTATE codes and, where necessary, constraint names. Unknown PostgreSQL errors fall through to the generic server-error response.
 
-Every error shape is `{ "error": { "code", "message", "details" } }`, including the organization-header error. Each PostgreSQL error branch (23505, 23514, 23503 for both `INVALID_ASSIGNEE` and `INVALID_REFERENCE`, 23502) and the generic 500 are tested by sending an error directly through the exported `errorHandler`.
+Every error response follows this shape:
+
+```json
+{
+  "error": {
+    "code": "...",
+    "message": "...",
+    "details": []
+  }
+}
+```
+
+The exported `errorHandler` has tests for PostgreSQL error branches `23505`, `23514`, `23503` (including `INVALID_ASSIGNEE` and `INVALID_REFERENCE`), and `23502`, as well as the generic 500 response. These tests send errors directly through the exported handler.
 
 For HTTP `500` responses, the API returns a generic error message instead of exposing raw SQL messages, stack traces, or internal implementation details.
 
@@ -113,7 +127,7 @@ Lead assignment requires the assigned user to belong to the same organization as
 
 PostgreSQL enforces data integrity independently of the Express API.
 
-The schema includes constraints for required fields, lead status, nonblank names and company names, a basic email check, organization relationships and organization-scoped email uniqueness.
+The baseline schema includes constraints for required fields, lead status, nonblank lead names and company names, a basic email check, organization relationships and organization-scoped lead email uniqueness.
 
 The `leads` table has a composite foreign key named `leads_assigned_to_org_fkey` on `(assigned_to, organization_id)`, referencing `(id, organization_id)` in `users`.
 
@@ -142,7 +156,90 @@ All queries that must belong to one transaction must use the same `PoolClient`. 
 
 Both the normal rollback path and the rollback-failure connection-disposal path have tests in `src/app.test.ts`. The rollback-failure test uses a fake client to exercise the failure path.
 
-## 6. Current Implementation Status
+## 6. Database Schema and Migrations
+
+Database schema files are organized as follows:
+
+| File | Purpose |
+|---|---|
+| `db/migrations/001_baseline.sql` | Creates the baseline schema for organizations, users and leads. |
+| `db/migrations/002_leads_id_org_unique.sql` | Adds the unique constraint on `(id, organization_id)` to support composite foreign-key references. |
+| `db/migrations/003_contacts.sql` | Creates the contacts table and its constraints. |
+| `db/seed.sql` | Provides seed data for development or test setup. |
+| `src/db/migrate.ts` | Runs pending migrations and records their application. |
+
+### 6.1 How Migrations Work
+
+A migration is a versioned SQL change that establishes or evolves the database schema.
+
+The migration runner:
+
+1. Creates the `schema_migrations` tracking table if it does not exist.
+2. Finds the `.sql` files in `db/migrations` and sorts them by filename.
+3. Reads the migration filenames already recorded in `schema_migrations`.
+4. Skips migrations that have already been applied.
+5. Executes each pending migration inside a PostgreSQL transaction.
+6. Records the migration filename in `schema_migrations` in the same transaction.
+7. Reports errors and sets a nonzero process exit code if migration execution fails.
+
+Recording the migration and executing its SQL in the same transaction ensures that a failed migration is not recorded as successfully applied.
+
+Run migrations against the database configured by the application's environment:
+
+```powershell
+npm run migrate
+```
+
+To run migrations using `.env.test` in PowerShell:
+
+```powershell
+$env:DOTENV_CONFIG_PATH = ".env.test"
+npm run migrate
+Remove-Item Env:DOTENV_CONFIG_PATH
+```
+
+Always verify which database is configured before running migrations. Development and test databases maintain separate schemas and migration histories.
+
+### 6.2 Contacts Table
+
+The `contacts` table stores contact records associated with an organization and a lead.
+
+| Column | Purpose |
+|---|---|
+| `id` | Generated contact identifier and primary key |
+| `organization_id` | Organization that owns the contact |
+| `lead_id` | Lead associated with the contact |
+| `name` | Contact name; cannot be blank |
+| `email` | Contact email, subject to the basic email check |
+| `phone` | Optional phone number |
+
+The table uses these constraints:
+
+- `contacts_name_not_blank` rejects names that contain only whitespace.
+- `contacts_email_check` requires an `@` in the email value.
+- `contacts_lead_email_unique` prevents duplicate email values for the same lead.
+- `contacts_organization_id_fkey` requires the organization to exist.
+- `contacts_lead_org_fkey` requires the referenced lead to belong to the same organization as the contact.
+
+The composite foreign key references `leads (id, organization_id)`. The corresponding unique constraint is added by `002_leads_id_org_unique.sql`.
+
+Together, these constraints prevent a contact from referencing a lead belonging to another organization, even if application-level validation is bypassed.
+
+The contact foreign keys use `ON DELETE RESTRICT` to prevent deleting referenced organizations or leads while dependent contacts remain.
+
+### 6.3 Migration Verification
+
+The following have been verified during Day 17:
+
+- All three migrations ran successfully against the development database.
+- All three migrations ran successfully against the test database.
+- The migration tracking table contains the three applied migration filenames.
+- A subsequent migration run skipped previously applied migrations.
+- The contacts table and its constraints were inspected in PostgreSQL.
+- A contact referencing a lead from another organization was rejected by `contacts_lead_org_fkey`.
+- A valid same-organization contact insert succeeded during manual verification; the test insert was rolled back afterward.
+
+## 7. Current Implementation Status
 
 - PostgreSQL configuration and a shared connection pool are implemented.
 - `GET /health/db` checks database connectivity.
@@ -156,5 +253,13 @@ Both the normal rollback path and the rollback-failure connection-disposal path 
 - A rollback-failure test verifies that the connection is discarded when rollback fails.
 - The composite foreign key `leads_assigned_to_org_fkey` enforces same-organization assignment at the database level.
 - The seed file has been corrected and tested against a disposable database; the five sample leads were verified to belong to the demo organization.
-- Test and typecheck results after the latest changes are pending (run `npm run typecheck; npm test`).
-- The existing development and test databases still need to be inspected to confirm that their actual schemas match `src/db/schema.sql`.
+- The migration runner and three migrations have been verified against both development and test databases.
+- A regression test verifies that a contact cannot reference a lead belonging to another organization.
+- The latest Day 17 verification passed **46 tests**, TypeScript typechecking and ESLint.
+
+## 8. Known Limitations and Future Work
+
+- The `x-org-id` header is temporary and must be replaced by organization identity derived from authenticated user context.
+- Email validation currently checks only for the presence of `@`; it is not a complete email validation implementation.
+- The contacts table has been created and its database-level tenant isolation has been tested. Contacts API endpoints and their service/repository layers remain future work.
+- Database error handling should be reviewed as new constraints and features are introduced, particularly to ensure that delete-restriction errors produce appropriate API responses.

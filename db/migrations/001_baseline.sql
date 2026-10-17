@@ -1,4 +1,4 @@
--- src/db/schema.sql
+--db/migrations/001_baseline.sql
 CREATE TABLE IF NOT EXISTS organizations (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name text NOT NULL,

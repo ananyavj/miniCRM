@@ -523,6 +523,32 @@ describe("MiniCRM API", () => {
         expect(result.rows[0].assigned_to).toBeNull();
     });
 
+    it("prevents a contact from referencing a lead in another organization", async () => {
+        const created = await request(app).post("/leads").set(org1).send({
+            name: "Contact Isolation Test",
+            email: "contact-isolation@example.com",
+            company: "Test Company",
+        });
+
+        expect(created.status).toBe(201);
+
+        await expect(
+            pool.query(
+                `INSERT INTO contacts (organization_id, lead_id, name, email)
+                 VALUES ($1, $2, $3, $4)`,
+                [
+                    2,
+                    created.body.id,
+                    "Cross-Organization Contact",
+                    "cross-contact@example.com",
+                ],
+            ),
+        ).rejects.toMatchObject({
+            code: "23503",
+            constraint: "contacts_lead_org_fkey",
+        });
+    });
+
     // Sends a given error through the real errorHandler, with no database involved.
     async function responseForError(error: unknown) {
         const testApp = express();
