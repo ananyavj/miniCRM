@@ -549,6 +549,93 @@ describe("MiniCRM API", () => {
         });
     });
 
+    it("creates a contact for an existing lead and returns 201", async () => {
+        const createdLead = await request(app).post("/leads").set(org1).send({
+            name: "Contact Test Lead",
+            email: "contact-lead@example.com",
+            company: "Test Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const response = await request(app)
+            .post(`/leads/${createdLead.body.id}/contacts`)
+            .set(org1)
+            .send({
+                name: "Rahul Sharma",
+                email: "rahul@example.com",
+                phone: "9876543210",
+            });
+
+        expect(response.status).toBe(201);
+        expect(response.body.id).toBeDefined();
+        expect(response.body.leadId).toBe(createdLead.body.id);
+        expect(response.body.name).toBe("Rahul Sharma");
+        expect(response.body.email).toBe("rahul@example.com");
+        expect(response.body.phone).toBe("9876543210");
+    });
+
+    it("does not allow a contact to be created for another organization's lead", async () => {
+        const createdLead = await request(app).post("/leads").set(org2).send({
+            name: "Organization Beta Lead",
+            email: "beta-contact-lead@example.com",
+            company: "Beta Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const response = await request(app)
+            .post(`/leads/${createdLead.body.id}/contacts`)
+            .set(org1)
+            .send({
+                name: "Unauthorized Contact",
+                email: "unauthorized-contact@example.com",
+            });
+
+        expect(response.status).toBe(404);
+
+        const result = await pool.query(
+            `SELECT id FROM contacts
+         WHERE email = $1`,
+            ["unauthorized-contact@example.com"],
+        );
+
+        expect(result.rows).toHaveLength(0);
+    });
+
+    it("prevents deleting a lead that has contacts and preserves the lead", async () => {
+        const createdLead = await request(app).post("/leads").set(org1).send({
+            name: "Lead With Contact",
+            email: "lead-with-contact@example.com",
+            company: "Test Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const createdContact = await request(app)
+            .post(`/leads/${createdLead.body.id}/contacts`)
+            .set(org1)
+            .send({
+                name: "Existing Contact",
+                email: "existing-contact@example.com",
+            });
+
+        expect(createdContact.status).toBe(201);
+
+        const deleteResponse = await request(app)
+            .delete(`/leads/${createdLead.body.id}`)
+            .set(org1);
+
+        expect(deleteResponse.status).toBe(409);
+        expect(deleteResponse.body.error.code).toBe("LEAD_HAS_CONTACTS");
+
+        const leadResponse = await request(app)
+            .get(`/leads/${createdLead.body.id}`)
+            .set(org1);
+
+        expect(leadResponse.status).toBe(200);
+        expect(leadResponse.body.id).toBe(createdLead.body.id);
+    });
     // Sends a given error through the real errorHandler, with no database involved.
     async function responseForError(error: unknown) {
         const testApp = express();
@@ -561,6 +648,7 @@ describe("MiniCRM API", () => {
 
     it.each([
         ["23505", "leads_organization_email_unique", 409, "DUPLICATE_EMAIL"],
+        ["23505", "contacts_lead_email_unique", 409, "DUPLICATE_CONTACT_EMAIL"],
         ["23514", "leads_status_check", 400, "INVALID_LEAD_STATUS"],
         ["23514", "leads_name_not_blank", 400, "VALIDATION_ERROR"],
         ["23514", "leads_company_not_blank", 400, "VALIDATION_ERROR"],

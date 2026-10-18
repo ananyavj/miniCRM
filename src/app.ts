@@ -1,7 +1,12 @@
 //src/app.ts
 import express, { type ErrorRequestHandler } from "express";
 import leadRoutes from "./modules/leads/leads.routes.js";
-import { NotFoundError, DuplicateIdError, ValidationError } from "./errors.js";
+import {
+    NotFoundError,
+    DuplicateIdError,
+    ValidationError,
+    LeadHasContactsError,
+} from "./errors.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";
 import { pool } from "./db/pool.js";
@@ -101,7 +106,16 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         });
         return;
     }
-
+    if (err instanceof LeadHasContactsError) {
+        res.status(409).json({
+            error: {
+                code: "LEAD_HAS_CONTACTS",
+                message: err.message,
+                details: [],
+            },
+        });
+        return;
+    }
     if (err instanceof ValidationError) {
         res.status(400).json({
             error: {
@@ -136,6 +150,18 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
                     code: "DUPLICATE_EMAIL",
                     message:
                         "A lead with this email already exists in this organization.",
+                    details: [],
+                },
+            });
+            return;
+        }
+
+        if (code === "23505" && constraint === "contacts_lead_email_unique") {
+            res.status(409).json({
+                error: {
+                    code: "DUPLICATE_CONTACT_EMAIL",
+                    message:
+                        "A contact with this email already exists for this lead.",
                     details: [],
                 },
             });

@@ -62,6 +62,7 @@ export async function deleteLead(
     id: number,
 ): Promise<void> {
     const deleted = await deleteLeadInDb(organizationId, id);
+
     if (!deleted) {
         throw new NotFoundError(`Lead with ID ${id} couldn't be deleted`);
     }

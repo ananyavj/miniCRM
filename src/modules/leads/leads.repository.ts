@@ -1,7 +1,12 @@
 //src/modules/leads/leads.repository.ts
 import type { PoolClient } from "pg";
 import { withTransaction } from "../../db/withTransaction.js";
-import { NotFoundError, ValidationError } from "../../errors.js";
+import {
+    NotFoundError,
+    ValidationError,
+    LeadHasContactsError,
+} from "../../errors.js";
+import { isPgConstraintError } from "../../db/pgErrors.js";
 import type { Lead, LeadStatus } from "./leads.types.js";
 import { pool } from "../../db/pool.js";
 
@@ -116,13 +121,23 @@ export async function deleteLead(
     organizationId: number,
     id: number,
 ): Promise<boolean> {
-    const result = await pool.query(
-        `DELETE FROM leads
+    try {
+        const result = await pool.query(
+            `DELETE FROM leads
          WHERE id = $1 AND organization_id = $2`,
-        [id, organizationId],
-    );
+            [id, organizationId],
+        );
 
-    return result.rowCount === 1;
+        return result.rowCount === 1;
+    } catch (error: unknown) {
+        if (isPgConstraintError(error, "23001", "contacts_lead_org_fkey")) {
+            throw new LeadHasContactsError(
+                "Cannot delete a lead that has contacts.",
+            );
+        }
+
+        throw error;
+    }
 }
 
 export async function assignLeadToUser(

@@ -17,10 +17,12 @@ import {
     assignLeadSchema,
 } from "./leads.schemas.js";
 import { requireOrganization } from "../../middleware/organization.js";
+import contactRoutes from "../contacts/contacts.routes.js";
 
 const router = Router();
 // TEMP: replaced by token on Day 24
 router.use(requireOrganization);
+router.use("/:leadId/contacts", contactRoutes);
 
 router.get("/", validate(listLeadsQuerySchema, "query"), async (req, res) => {
     const organizationId: number = res.locals.organizationId;
