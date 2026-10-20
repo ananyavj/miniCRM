@@ -1,12 +1,7 @@
-//src/app.ts
+// src/app.ts
 import express, { type ErrorRequestHandler } from "express";
 import leadRoutes from "./modules/leads/leads.routes.js";
-import {
-    NotFoundError,
-    DuplicateIdError,
-    ValidationError,
-    LeadHasContactsError,
-} from "./errors.js";
+import { AppError } from "./errors.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";
 import { pool } from "./db/pool.js";
@@ -20,6 +15,7 @@ app.use("/leads", leadRoutes);
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });
 });
+
 app.get("/health/db", async (req, res) => {
     try {
         await pool.query("SELECT 1");
@@ -66,6 +62,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         });
         return;
     }
+
     if (
         typeof err === "object" &&
         err !== null &&
@@ -96,43 +93,12 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         return;
     }
 
-    if (err instanceof NotFoundError) {
-        res.status(404).json({
+    if (err instanceof AppError) {
+        res.status(err.status).json({
             error: {
-                code: "NOT_FOUND",
+                code: err.code,
                 message: err.message,
-                details: [],
-            },
-        });
-        return;
-    }
-    if (err instanceof LeadHasContactsError) {
-        res.status(409).json({
-            error: {
-                code: "LEAD_HAS_CONTACTS",
-                message: err.message,
-                details: [],
-            },
-        });
-        return;
-    }
-    if (err instanceof ValidationError) {
-        res.status(400).json({
-            error: {
-                code: "VALIDATION_ERROR",
-                message: err.message,
-                details: [],
-            },
-        });
-        return;
-    }
-
-    if (err instanceof DuplicateIdError) {
-        res.status(409).json({
-            error: {
-                code: "DUPLICATE_ID",
-                message: err.message,
-                details: [],
+                details: err.details,
             },
         });
         return;
@@ -196,6 +162,22 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
             return;
         }
 
+        if (
+            code === "23514" &&
+            (constraint === "deals_title_not_blank" ||
+                constraint === "deals_value_cents_check" ||
+                constraint === "deals_stage_check")
+        ) {
+            res.status(400).json({
+                error: {
+                    code: "VALIDATION_ERROR",
+                    message: "Deal data violates a validation rule.",
+                    details: [],
+                },
+            });
+            return;
+        }
+
         if (code === "23503") {
             const isAssignmentError =
                 constraint === "leads_assigned_to_org_fkey";
@@ -225,7 +207,9 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
             return;
         }
     }
+
     console.error(err);
+
     res.status(500).json({
         error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -234,6 +218,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         },
     });
 };
+
 app.use(errorHandler);
 
 app.use((req, res) => {

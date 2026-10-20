@@ -50,6 +50,8 @@ Organization 2, "Beta Corp", is a completely separate company using the same dat
 3. A lead is the main prospect record. A contact is an extra person attached to a lead. Several contacts can point to one lead (`contacts.lead_id`).
 4. Every row stores its `organization_id`, and the composite foreign keys make sure a contact, deal or assignment can never cross into another organization.
 5. `leads.assigned_to` points to a USER (our staff member), not a contact.
+6. A deal has a stage, and it can only move in allowed steps: `prospecting` -> `proposal` -> `negotiation` -> `won`, with `lost` reachable from any stage that is not final. `won` and `lost` are final. In the example, "Cloud migration project" is in `negotiation`, so it may next move to `won` or `lost`, but not back to `proposal`.
+7. A lead that still has contacts or deals cannot be deleted. The team must remove them first.
 
 ## A deliberate simplification
 

@@ -1,5 +1,19 @@
 # Retention Queue
 
+Topics to re-do from memory, in order. A topic leaves the queue when you can write it blind and explain it in 5 sentences. Day 20 (blind notes API) will add to or reorder this list after review.
+
+| # | Topic | Why it is here | Status |
+|---|---|---|---|
+| 1 | `src/db/pgErrors.ts`: narrowing `unknown` to check a Postgres error's `code` and `constraint` | Blind recall on Day 16 had gaps | open |
+| 2 | SQLSTATE to HTTP mapping (23505 -> 409, 23514 -> 400, 23503 -> 400, 23502 -> 400, 23001 on delete -> 409) | Easy to mix up; `ON DELETE RESTRICT` raises 23001, not 23503 | open |
+| 3 | Path of an error: Postgres -> repository (`ConflictError`) -> `errorHandler` -> 409 JSON | Day 18/19 repository translation | open |
+| 4 | `AppError` and `ConflictError` classes, one `instanceof AppError` branch | Day 19 refactor | open |
+| 5 | `canTransition` table and the optimistic `UPDATE ... AND stage = $from` | Day 19 | open |
+| 6 | `src/db/migrate.ts` from memory (tracking table, sorted files, one transaction per migration) | Day 16 gap | open |
+| 7 | `withTransaction` (BEGIN, COMMIT, ROLLBACK, release or destroy the client) | Syntax slips in the Day 16 attempt | open |
+
+## Scratch: Day 16 blind-recall attempts (unreviewed; they contain typos, for example an unclosed string in `BEGIN`)
+
 import { z } from "zod";
 import { Request, Response, NextFunction } from "express";
 const organizationHeaderSchema = z.string().regex(/^[1-9]\d*$/).transform(Number);

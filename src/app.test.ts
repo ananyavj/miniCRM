@@ -24,7 +24,7 @@ describe("MiniCRM API", () => {
         }
 
         await pool.query(
-            "TRUNCATE TABLE leads, users, organizations RESTART IDENTITY CASCADE",
+            "TRUNCATE TABLE deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
         );
 
         await pool.query(
@@ -636,6 +636,110 @@ describe("MiniCRM API", () => {
         expect(leadResponse.status).toBe(200);
         expect(leadResponse.body.id).toBe(createdLead.body.id);
     });
+    it("creates a deal with the default stage and value", async () => {
+        const createdLead = await request(app).post("/leads").set(org1).send({
+            name: "Deal Test Lead",
+            email: "deal-test@example.com",
+            company: "Test Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const response = await request(app)
+            .post(`/leads/${createdLead.body.id}/deals`)
+            .set(org1)
+            .send({ title: "Cloud migration project" });
+
+        expect(response.status).toBe(201);
+        expect(response.body.stage).toBe("prospecting");
+        expect(response.body.valueCents).toBe(0);
+    });
+
+    it("moves a deal to a valid stage", async () => {
+        const createdLead = await request(app).post("/leads").set(org1).send({
+            name: "Stage Test Lead",
+            email: "stage-test@example.com",
+            company: "Test Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const createdDeal = await request(app)
+            .post(`/leads/${createdLead.body.id}/deals`)
+            .set(org1)
+            .send({ title: "Cloud migration project" });
+
+        expect(createdDeal.status).toBe(201);
+
+        const response = await request(app)
+            .patch(
+                `/leads/${createdLead.body.id}/deals/${createdDeal.body.id}/stage`,
+            )
+            .set(org1)
+            .send({ stage: "proposal" });
+
+        expect(response.status).toBe(200);
+        expect(response.body.stage).toBe("proposal");
+    });
+
+    it("rejects an invalid deal stage transition", async () => {
+        const createdLead = await request(app).post("/leads").set(org1).send({
+            name: "Invalid Stage Lead",
+            email: "invalid-stage@example.com",
+            company: "Test Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const createdDeal = await request(app)
+            .post(`/leads/${createdLead.body.id}/deals`)
+            .set(org1)
+            .send({ title: "Cloud migration project" });
+
+        expect(createdDeal.status).toBe(201);
+
+        const response = await request(app)
+            .patch(
+                `/leads/${createdLead.body.id}/deals/${createdDeal.body.id}/stage`,
+            )
+            .set(org1)
+            .send({ stage: "won" });
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("INVALID_STAGE_TRANSITION");
+    });
+
+    it("prevents deleting a lead that has deals and preserves the lead", async () => {
+        const createdLead = await request(app).post("/leads").set(org1).send({
+            name: "Lead With Deal",
+            email: "lead-with-deal@example.com",
+            company: "Test Company",
+        });
+
+        expect(createdLead.status).toBe(201);
+
+        const createdDeal = await request(app)
+            .post(`/leads/${createdLead.body.id}/deals`)
+            .set(org1)
+            .send({ title: "Cloud migration project" });
+
+        expect(createdDeal.status).toBe(201);
+
+        const deleteResponse = await request(app)
+            .delete(`/leads/${createdLead.body.id}`)
+            .set(org1);
+
+        expect(deleteResponse.status).toBe(409);
+        expect(deleteResponse.body.error.code).toBe("LEAD_HAS_DEALS");
+
+        const leadResponse = await request(app)
+            .get(`/leads/${createdLead.body.id}`)
+            .set(org1);
+
+        expect(leadResponse.status).toBe(200);
+        expect(leadResponse.body.id).toBe(createdLead.body.id);
+    });
+
     // Sends a given error through the real errorHandler, with no database involved.
     async function responseForError(error: unknown) {
         const testApp = express();

@@ -37,7 +37,7 @@ Alice (a user of Alpha Sales) is an employee who works in the CRM. Rahul (a lead
 | `users` | one employee of an organization | Alice, works at Alpha Sales | id, organization_id, name, email |
 | `leads` | one prospective customer the organization is tracking: a person, with the company they work for written as plain text | Rahul Sharma, company "Infosys", status `qualified` | id, organization_id, name, email, phone, company, status, assigned_to |
 | `contacts` | another person connected to a lead | Priya Nair, Rahul's director, whom the team also talks to | id, organization_id, lead_id, name, email, phone |
-| `deals` (Day 19) | one possible sale tied to a lead, with a value and a stage | "Cloud migration project", 50,000, stage `negotiation` | id, organization_id, lead_id, title, value_cents, stage |
+| `deals` | one possible sale tied to a lead, with a value and a stage | "Cloud migration project", 50,000, stage `negotiation` | id, organization_id, lead_id, title, value_cents, stage |
 
 ## How they connect
 ```

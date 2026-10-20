@@ -1,24 +1,46 @@
-export class NotFoundError extends Error {
-    constructor(message: string) {
+export class AppError extends Error {
+    status: number;
+    code: string;
+    details: unknown[];
+
+    constructor(
+        status: number,
+        code: string,
+        message: string,
+        details: unknown[] = [],
+    ) {
         super(message);
+        this.name = "AppError";
+        this.status = status;
+        this.code = code;
+        this.details = details;
     }
 }
 
-export class DuplicateIdError extends Error {
+export class NotFoundError extends AppError {
     constructor(message: string) {
-        super(message);
+        super(404, "NOT_FOUND", message);
+        this.name = "NotFoundError";
     }
 }
 
-export class ValidationError extends Error {
+export class DuplicateIdError extends AppError {
     constructor(message: string) {
-        super(message);
+        super(409, "DUPLICATE_ID", message);
+        this.name = "DuplicateIdError";
     }
 }
 
-export class LeadHasContactsError extends Error {
+export class ValidationError extends AppError {
     constructor(message: string) {
-        super(message);
-        this.name = "LeadHasContactsError";
+        super(400, "VALIDATION_ERROR", message);
+        this.name = "ValidationError";
+    }
+}
+
+export class ConflictError extends AppError {
+    constructor(code: string, message: string) {
+        super(409, code, message);
+        this.name = "ConflictError";
     }
 }
