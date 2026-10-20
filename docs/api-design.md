@@ -2,6 +2,8 @@
 
 ## 1. API Endpoints
 
+Example names and ids in this document come from the single reference dataset in `docs/data-model.md`.
+
 | Operation | HTTP endpoint | Success status |
 |---|---|---:|
 | Health check | `GET /health` | 200 |

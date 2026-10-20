@@ -32,6 +32,8 @@ users         1 ──── N leads   (leads.assigned_to: which staff member is
 
 ## One example
 
+This is the project's single reference example. The full table with ids is in `docs/data-model.md`; use only those names in docs and explanations.
+
 Organization 1, "Alpha Sales", is a company that uses MiniCRM.
 
 - **Users** (Alpha's staff): Alice, Karan. They log in.
@@ -39,7 +41,7 @@ Organization 1, "Alpha Sales", is a company that uses MiniCRM.
   - **Contacts** of that lead: Priya Nair (Rahul's director, approves the budget), Amit Patel (IT manager, evaluates the product).
   - **Deal:** "Cloud migration project", 50,000, stage `negotiation`.
 
-Organization 2 is a completely separate company using the same database. It cannot see anything of Alpha's. That separation is called multi-tenancy, and it is why almost every query has `WHERE organization_id = ...`.
+Organization 2, "Beta Corp", is a completely separate company using the same database. It cannot see anything of Alpha's. That separation is called multi-tenancy, and it is why almost every query has `WHERE organization_id = ...`.
 
 ## Rules to remember
 
