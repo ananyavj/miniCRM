@@ -753,6 +753,7 @@ describe("MiniCRM API", () => {
     it.each([
         ["23505", "leads_organization_email_unique", 409, "DUPLICATE_EMAIL"],
         ["23505", "contacts_lead_email_unique", 409, "DUPLICATE_CONTACT_EMAIL"],
+        ["23505", "users_email_unique", 409, "EMAIL_ALREADY_REGISTERED"],
         ["23514", "leads_status_check", 400, "INVALID_LEAD_STATUS"],
         ["23514", "leads_name_not_blank", 400, "VALIDATION_ERROR"],
         ["23514", "leads_company_not_blank", 400, "VALIDATION_ERROR"],
@@ -790,5 +791,24 @@ describe("MiniCRM API", () => {
         } finally {
             consoleSpy.mockRestore();
         }
+    });
+
+    it("rejects duplicate user emails at the database level", async () => {
+        await pool.query(
+            `INSERT INTO users (organization_id, name, email)
+         VALUES ($1, $2, $3)`,
+            [1, "First User", "duplicate-user@example.com"],
+        );
+
+        await expect(
+            pool.query(
+                `INSERT INTO users (organization_id, name, email)
+             VALUES ($1, $2, $3)`,
+                [2, "Second User", "duplicate-user@example.com"],
+            ),
+        ).rejects.toMatchObject({
+            code: "23505",
+            constraint: "users_email_unique",
+        });
     });
 });

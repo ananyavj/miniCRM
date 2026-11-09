@@ -134,6 +134,17 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
             return;
         }
 
+        if (code === "23505" && constraint === "users_email_unique") {
+            res.status(409).json({
+                error: {
+                    code: "EMAIL_ALREADY_REGISTERED",
+                    message: "An account with this email already exists.",
+                    details: [],
+                },
+            });
+            return;
+        }
+
         if (code === "23514" && constraint === "leads_status_check") {
             res.status(400).json({
                 error: {
@@ -150,12 +161,15 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
             code === "23514" &&
             (constraint === "leads_name_not_blank" ||
                 constraint === "leads_company_not_blank" ||
-                constraint === "leads_email_check")
+                constraint === "leads_email_check" ||
+                constraint === "users_email_check" ||
+                constraint === "users_name_not_blank" ||
+                constraint === "users_role_check")
         ) {
             res.status(400).json({
                 error: {
                     code: "VALIDATION_ERROR",
-                    message: "Lead data violates a validation rule.",
+                    message: "Data violates a validation rule.",
                     details: [],
                 },
             });

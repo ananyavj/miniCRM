@@ -1,6 +1,6 @@
 # Retention Queue
 
-Topics to re-do from memory, in order. A topic leaves the queue when you can write it blind and explain it in 5 sentences. Day 20 (blind notes API) will add to or reorder this list after review.
+Topics to re-do from memory, in order. A topic leaves the queue when you can write it blind and explain it in 5 sentences. Rows 8 to 14 were added after the Day 20 recall day (2026-11-08).
 
 | # | Topic | Why it is here | Status |
 |---|---|---|---|
@@ -11,6 +11,15 @@ Topics to re-do from memory, in order. A topic leaves the queue when you can wri
 | 5 | `canTransition` table and the optimistic `UPDATE ... AND stage = $from` | Day 19 | open |
 | 6 | `src/db/migrate.ts` from memory (tracking table, sorted files, one transaction per migration) | Day 16 gap | open |
 | 7 | `withTransaction` (BEGIN, COMMIT, ROLLBACK, release or destroy the client) | Syntax slips in the Day 16 attempt | open |
+| 8 | `requireOrganization` from memory: header, Zod regex plus transform, `res.locals.organizationId`, standard `INVALID_ORG_ID` response | Day 20: concept fine, syntax unstable | open |
+| 9 | `validate(schema, source)`: why it returns a function, what `RequestHandler`, `req, res, next` and `next(error)` mean | Day 20: needed a long explanation | open |
+| 10 | `res.locals`: what is stored where (`params`, `body`, `query`, `organizationId`) | Day 20 | open |
+| 11 | `ContactRow` (database row shape) vs `Contact` (API shape), `mapContactRow`, and Zod schema vs `z.infer` type | Day 20: mixed up types and runtime values | open |
+| 12 | `RETURNING`, `result.rows`, `result.rows[0]!` (compile-time assertion, no runtime check) | Day 20 | open |
+| 13 | SQLSTATE vs constraint name: `23001` says a RESTRICT rule blocked the delete; the constraint name says which table's rule | Day 20: misread 23001 as "lead has no contacts" | open |
+| 14 | Debugging: first look where the error ORIGINATES (repository translation, service check), not where it is formatted (`errorHandler`) | Day 20: 4 of 7 first choices right | open |
+| 15 | Why rules live in the database at all (constraints as the last line of defence), and how Postgres enforces them on INSERT/UPDATE | Day 21: self-reported as the shakiest area | open |
+| 16 | Two databases, one migrate script: `dotenv/config` picks the DB from `DOTENV_CONFIG_PATH`, which stays set for the whole PowerShell window | Day 21: test DB was behind dev, tests failed until it was migrated | open |
 
 ## Scratch: Day 16 blind-recall attempts (unreviewed; they contain typos, for example an unclosed string in `BEGIN`)
 
