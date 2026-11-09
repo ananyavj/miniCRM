@@ -5,11 +5,13 @@ import { AppError } from "./errors.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";
 import { pool } from "./db/pool.js";
+import authRoutes from "./modules/auth/auth.routes.js";
 
 const app = express();
 
 app.use(requestLogger);
 app.use(express.json({ limit: "100kb" }));
+app.use("/auth", authRoutes);
 app.use("/leads", leadRoutes);
 
 app.get("/health", (req, res) => {

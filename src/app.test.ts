@@ -811,4 +811,89 @@ describe("MiniCRM API", () => {
             constraint: "users_email_unique",
         });
     });
+
+    it("registers an organization owner", async () => {
+        const response = await request(app).post("/auth/register").send({
+            organizationName: "Acme Corp",
+            name: "Alice",
+            email: "  Alice@Example.com  ",
+            password: "password123",
+        });
+
+        expect(response.status).toBe(201);
+
+        expect(response.body.organization).toEqual(
+            expect.objectContaining({
+                name: "Acme Corp",
+            }),
+        );
+
+        expect(response.body.user).toEqual(
+            expect.objectContaining({
+                name: "Alice",
+                email: "alice@example.com",
+                role: "owner",
+            }),
+        );
+
+        // No password or hash anywhere in the response, under any name.
+        expect(JSON.stringify(response.body)).not.toMatch(/password/i);
+
+        // The database stores a bcrypt hash, never the plain password.
+        const stored = await pool.query(
+            "SELECT password_hash FROM users WHERE email = $1",
+            ["alice@example.com"],
+        );
+        const storedHash: string = stored.rows[0].password_hash;
+
+        expect(storedHash).not.toBe("password123");
+        expect(storedHash.startsWith("$2")).toBe(true);
+    });
+
+    it("rejects duplicate email registration", async () => {
+        await request(app).post("/auth/register").send({
+            organizationName: "First Corp",
+            name: "Alice",
+            email: "duplicate@example.com",
+            password: "password123",
+        });
+
+        const before = await pool.query(
+            "SELECT COUNT(*)::int AS count FROM organizations",
+        );
+
+        const response = await request(app).post("/auth/register").send({
+            organizationName: "Second Corp",
+            name: "Bob",
+            email: "duplicate@example.com",
+            password: "password123",
+        });
+
+        const after = await pool.query(
+            "SELECT COUNT(*)::int AS count FROM organizations",
+        );
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("EMAIL_ALREADY_REGISTERED");
+        expect(after.rows[0].count).toBe(before.rows[0].count);
+    });
+
+    it("rejects a weak password", async () => {
+        const response = await request(app).post("/auth/register").send({
+            organizationName: "Weak Password Corp",
+            name: "Alice",
+            email: "weak@example.com",
+            password: "short12", // 7 characters: one below the minimum
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
+
+        // Nothing was created.
+        const users = await pool.query(
+            "SELECT COUNT(*)::int AS count FROM users WHERE email = $1",
+            ["weak@example.com"],
+        );
+        expect(users.rows[0].count).toBe(0);
+    });
 });
