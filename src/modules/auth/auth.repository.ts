@@ -1,4 +1,5 @@
 import { withTransaction } from "../../db/withTransaction.js";
+import { pool } from "../../db/pool.js";
 import type { RegisterInput } from "./auth.schemas.js";
 import type { Organization, User } from "./auth.types.js";
 
@@ -62,4 +63,45 @@ export async function createOrganizationWithOwner(
             },
         };
     });
+}
+
+export async function findCredentialsByEmail(email: string) {
+    const result = await pool.query<{
+        id: number;
+        organization_id: number;
+        name: string;
+        email: string;
+        role: "owner" | "member";
+        password_hash: string | null;
+    }>(
+        `
+        SELECT
+            id,
+            organization_id,
+            name,
+            email,
+            role,
+            password_hash
+        FROM users
+        WHERE email = $1
+        `,
+        [email],
+    );
+
+    const row = result.rows[0]!;
+
+    if (!row) {
+        return undefined;
+    }
+
+    return {
+        user: {
+            id: row.id,
+            organizationId: row.organization_id,
+            name: row.name,
+            email: row.email,
+            role: row.role,
+        },
+        passwordHash: row.password_hash,
+    };
 }

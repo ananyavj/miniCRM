@@ -5,6 +5,7 @@ import express from "express";
 import app, { errorHandler } from "./app.js";
 import { pool } from "./db/pool.js";
 import { withTransaction } from "./db/withTransaction.js";
+import { verifyAccessToken } from "./modules/auth/token.js";
 
 const org1 = { "x-org-id": "1" };
 const org2 = { "x-org-id": "2" };
@@ -895,5 +896,107 @@ describe("MiniCRM API", () => {
             ["weak@example.com"],
         );
         expect(users.rows[0].count).toBe(0);
+    });
+
+    it("logs in with valid credentials", async () => {
+        const email = `Login${Date.now()}@Example.com`;
+        const password = "password123";
+
+        await request(app)
+            .post("/auth/register")
+            .send({
+                organizationName: "Login Test Org",
+                name: "Login User",
+                email,
+                password,
+            })
+            .expect(201);
+
+        const response = await request(app)
+            .post("/auth/login")
+            .send({
+                email: `  ${email.toUpperCase()}  `,
+                password,
+            })
+            .expect(200);
+
+        expect(response.body.accessToken).toEqual(expect.any(String));
+
+        expect(response.body.user).toMatchObject({
+            email: email.toLowerCase(),
+            role: "owner",
+        });
+
+        expect(response.body.user).not.toHaveProperty("password");
+        expect(response.body.user).not.toHaveProperty("passwordHash");
+
+        const payload = verifyAccessToken(response.body.accessToken);
+
+        expect(payload).toEqual({
+            userId: response.body.user.id,
+            organizationId: response.body.user.organizationId,
+            role: "owner",
+        });
+    });
+
+    it("rejects an incorrect password", async () => {
+        const email = `WrongPassword${Date.now()}@example.com`;
+
+        await request(app)
+            .post("/auth/register")
+            .send({
+                organizationName: "Wrong Password Org",
+                name: "Wrong Password User",
+                email,
+                password: "correctPassword123",
+            })
+            .expect(201);
+
+        const response = await request(app)
+            .post("/auth/login")
+            .send({
+                email,
+                password: "wrongPassword123",
+            })
+            .expect(401);
+
+        expect(response.body).toMatchObject({
+            error: {
+                code: "INVALID_CREDENTIALS",
+                message: "Invalid email or password.",
+            },
+        });
+    });
+
+    it("returns the same authentication error for an unknown email and a wrong password", async () => {
+        const email = `SameError${Date.now()}@example.com`;
+
+        await request(app)
+            .post("/auth/register")
+            .send({
+                organizationName: "Same Error Org",
+                name: "Same Error User",
+                email,
+                password: "correctPassword123",
+            })
+            .expect(201);
+
+        const wrongPasswordResponse = await request(app)
+            .post("/auth/login")
+            .send({
+                email,
+                password: "wrongPassword123",
+            })
+            .expect(401);
+
+        const unknownEmailResponse = await request(app)
+            .post("/auth/login")
+            .send({
+                email: `unknown-${email}`,
+                password: "wrongPassword123",
+            })
+            .expect(401);
+
+        expect(unknownEmailResponse.body).toEqual(wrongPasswordResponse.body);
     });
 });
