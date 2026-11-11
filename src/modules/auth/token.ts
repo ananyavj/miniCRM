@@ -5,7 +5,7 @@ import { config } from "../../config.js";
 const JWT_ALGORITHM = "HS256" as const;
 const JWT_EXPIRES_IN = "1h" as const;
 
-const acessTokenPayloadSchema = z.object({
+const accessTokenPayloadSchema = z.object({
     sub: z.string(),
     org: z.number().int().positive(),
     role: z.enum(["owner", "member"]),
@@ -45,7 +45,7 @@ export function verifyAccessToken(token: string): {
         algorithms: [JWT_ALGORITHM],
     });
 
-    const parsed = acessTokenPayloadSchema.parse(payload);
+    const parsed = accessTokenPayloadSchema.parse(payload);
 
     return {
         userId: Number(parsed.sub),

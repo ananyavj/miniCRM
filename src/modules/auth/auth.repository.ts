@@ -88,7 +88,7 @@ export async function findCredentialsByEmail(email: string) {
         [email],
     );
 
-    const row = result.rows[0]!;
+    const row = result.rows[0];
 
     if (!row) {
         return undefined;

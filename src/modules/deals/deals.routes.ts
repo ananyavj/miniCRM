@@ -6,16 +6,16 @@ import {
     dealParamsSchema,
     changeStageSchema,
 } from "./deals.schemas.js";
+import { requireAuth } from "../../middleware/auth.js";
 import {
     listDeals,
     createDeal,
     deleteDeal,
     changeStage,
 } from "./deals.service.js";
-import { requireOrganization } from "../../middleware/organization.js";
 
 const router = Router({ mergeParams: true });
-router.use(requireOrganization);
+router.use(requireAuth);
 
 router.get("/", validate(leadParamsSchema, "params"), async (_req, res) => {
     const orgId = res.locals.organizationId;

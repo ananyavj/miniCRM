@@ -16,13 +16,12 @@ import {
     updateLeadStatusSchema,
     assignLeadSchema,
 } from "./leads.schemas.js";
-import { requireOrganization } from "../../middleware/organization.js";
+import { requireAuth } from "../../middleware/auth.js";
 import contactRoutes from "../contacts/contacts.routes.js";
 import dealRoutes from "../deals/deals.routes.js";
 
 const router = Router();
-// TEMP: replaced by token on Day 24
-router.use(requireOrganization);
+router.use(requireAuth);
 router.use("/:leadId/contacts", contactRoutes);
 router.use("/:leadId/deals", dealRoutes);
 

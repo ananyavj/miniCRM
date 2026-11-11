@@ -7,6 +7,7 @@ import {
     contactParamsSchema,
     updateContactSchema,
 } from "./contacts.schemas.js";
+import { requireAuth } from "../../middleware/auth.js";
 import {
     listContacts,
     createContact,
@@ -14,10 +15,9 @@ import {
     updateContact,
     deleteContact,
 } from "./contacts.service.js";
-import { requireOrganization } from "../../middleware/organization.js";
 
 const router = Router({ mergeParams: true });
-router.use(requireOrganization);
+router.use(requireAuth);
 
 router.get("/", validate(leadParamsSchema, "params"), async (_req, res) => {
     const orgId = res.locals.organizationId;

@@ -1,11 +1,11 @@
-import { hashPassword } from "./password.js";
-import { createOrganizationWithOwner } from "./auth.repository.js";
-import type { RegisterInput } from "./auth.schemas.js";
-import { AppError } from "../../errors.js";
+import { hashPassword, verifyPassword } from "./password.js";
+import {
+    createOrganizationWithOwner,
+    findCredentialsByEmail,
+} from "./auth.repository.js";
+import type { LoginInput, RegisterInput } from "./auth.schemas.js";
 import { signAccessToken } from "./token.js";
-import { findCredentialsByEmail } from "./auth.repository.js";
-import { verifyPassword } from "./password.js";
-import type { LoginInput } from "./auth.schemas.js";
+import { AppError } from "../../errors.js";
 
 export async function registerOwner(input: RegisterInput) {
     const passwordHash = await hashPassword(input.password);

@@ -5,12 +5,33 @@ import express from "express";
 import app, { errorHandler } from "./app.js";
 import { pool } from "./db/pool.js";
 import { withTransaction } from "./db/withTransaction.js";
-import { verifyAccessToken } from "./modules/auth/token.js";
+import { signAccessToken, verifyAccessToken } from "./modules/auth/token.js";
+import jwt from "jsonwebtoken";
+import { config } from "./config.js";
 
-const org1 = { "x-org-id": "1" };
-const org2 = { "x-org-id": "2" };
+let org1: { Authorization: string };
+let org2: { Authorization: string };
 
 describe("MiniCRM API", () => {
+    const aliceToken = signAccessToken({
+        userId: 1,
+        organizationId: 1,
+        role: "member",
+    });
+
+    const bobToken = signAccessToken({
+        userId: 2,
+        organizationId: 2,
+        role: "member",
+    });
+
+    org1 = {
+        Authorization: `Bearer ${aliceToken}`,
+    };
+
+    org2 = {
+        Authorization: `Bearer ${bobToken}`,
+    };
     beforeEach(async () => {
         const databaseUrl = process.env.DATABASE_URL;
 
@@ -70,25 +91,6 @@ describe("MiniCRM API", () => {
             database: "connected",
         });
     });
-
-    it("rejects requests without an organization header", async () => {
-        const response = await request(app).get("/leads");
-
-        expect(response.status).toBe(400);
-        expect(response.body.error.code).toBe("INVALID_ORG_ID");
-    });
-
-    it.each(["abc", "0", "-1", "1.5"])(
-        "rejects invalid organization ID: %s",
-        async (organizationId) => {
-            const response = await request(app)
-                .get("/leads")
-                .set("x-org-id", organizationId);
-
-            expect(response.status).toBe(400);
-            expect(response.body.error.code).toBe("INVALID_ORG_ID");
-        },
-    );
 
     it("returns an empty list for a new organization", async () => {
         const response = await request(app).get("/leads").set(org1);
@@ -998,5 +1000,133 @@ describe("MiniCRM API", () => {
             .expect(401);
 
         expect(unknownEmailResponse.body).toEqual(wrongPasswordResponse.body);
+    });
+
+    it("rejects requests without a token", async () => {
+        const response = await request(app).get("/leads");
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("AUTH_REQUIRED");
+    });
+
+    it("rejects x-org-id without a token", async () => {
+        const response = await request(app).get("/leads").set("x-org-id", "1");
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("AUTH_REQUIRED");
+    });
+
+    it.each(["Basic abc123", "Bearer"])(
+        "rejects malformed Authorization header: %s",
+        async (authorization) => {
+            const response = await request(app)
+                .get("/leads")
+                .set("Authorization", authorization);
+
+            expect(response.status).toBe(401);
+            expect(response.body.error.code).toBe("AUTH_REQUIRED");
+        },
+    );
+    it("rejects a tampered token", async () => {
+        const parts = aliceToken.split(".");
+
+        parts[1] = `${parts[1]}x`;
+
+        const tamperedToken = parts.join(".");
+
+        const response = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${tamperedToken}`);
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("INVALID_TOKEN");
+    });
+    it("rejects an expired token", async () => {
+        const expiredToken = jwt.sign(
+            {
+                org: 1,
+                role: "member",
+            },
+            config.JWT_SECRET,
+            {
+                subject: "1",
+                algorithm: "HS256",
+                expiresIn: -60,
+            },
+        );
+
+        const response = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${expiredToken}`);
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("INVALID_TOKEN");
+    });
+    it("uses the login token for authenticated lead requests", async () => {
+        const email = `day24-${Date.now()}@example.com`;
+        const password = "Password123!";
+
+        const registerResponse = await request(app)
+            .post("/auth/register")
+            .send({
+                organizationName: "Day 24 Test Org",
+                name: "Day 24 User",
+                email,
+                password,
+            });
+
+        expect(registerResponse.status).toBe(201);
+
+        const loginResponse = await request(app).post("/auth/login").send({
+            email,
+            password,
+        });
+
+        expect(loginResponse.status).toBe(200);
+
+        const token = loginResponse.body.accessToken;
+
+        expect(token).toEqual(expect.any(String));
+
+        const createResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${token}`)
+            .send({
+                name: "Day 24 Lead",
+                company: "Day 24 Company",
+                email: `lead-${Date.now()}@example.com`,
+            });
+
+        expect(createResponse.status).toBe(201);
+
+        const leadId = createResponse.body.id;
+
+        const listResponse = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${token}`);
+
+        expect(listResponse.status).toBe(200);
+
+        expect(listResponse.body).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    id: leadId,
+                }),
+            ]),
+        );
+
+        const aliceResponse = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`);
+
+        expect(aliceResponse.status).toBe(200);
+
+        expect(aliceResponse.body).not.toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    id: leadId,
+                }),
+            ]),
+        );
     });
 });
