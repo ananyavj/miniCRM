@@ -1129,4 +1129,283 @@ describe("MiniCRM API", () => {
             ]),
         );
     });
+    it("rejects a token whose user no longer exists", async () => {
+        const token = signAccessToken({
+            userId: 999999,
+            organizationId: 1,
+            role: "member",
+        });
+
+        const response = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${token}`);
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("INVALID_TOKEN");
+    });
+
+    it("rejects a token whose organization does not match the user's organization", async () => {
+        const token = signAccessToken({
+            userId: 1,
+            organizationId: 999999,
+            role: "member",
+        });
+
+        const response = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${token}`);
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("INVALID_TOKEN");
+    });
+    it("does not allow one organization to read another organization's contacts", async () => {
+        const aliceToken = signAccessToken({
+            userId: 1,
+            organizationId: 1,
+            role: "owner",
+        });
+
+        const bobToken = signAccessToken({
+            userId: 2,
+            organizationId: 2,
+            role: "owner",
+        });
+
+        const leadResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Lead",
+                company: "Alice Company",
+                email: "alice-lead@example.com",
+            });
+
+        expect(leadResponse.status).toBe(201);
+
+        const leadId = leadResponse.body.id;
+
+        const contactResponse = await request(app)
+            .post(`/leads/${leadId}/contacts`)
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Contact",
+                email: "alice-contact@example.com",
+                phone: "1234567890",
+            });
+
+        expect(contactResponse.status).toBe(201);
+
+        const response = await request(app)
+            .get(`/leads/${leadId}/contacts`)
+            .set("Authorization", `Bearer ${bobToken}`);
+
+        expect(response.status).toBe(404);
+    });
+
+    it("does not allow one organization to read another organization's contact", async () => {
+        const aliceToken = signAccessToken({
+            userId: 1,
+            organizationId: 1,
+            role: "owner",
+        });
+
+        const bobToken = signAccessToken({
+            userId: 2,
+            organizationId: 2,
+            role: "owner",
+        });
+
+        const leadResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Lead",
+                company: "Alice Company",
+                email: "alice-contact-read@example.com",
+            });
+
+        const leadId = leadResponse.body.id;
+
+        const contactResponse = await request(app)
+            .post(`/leads/${leadId}/contacts`)
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Contact",
+                email: "alice-contact-read@example.com",
+                phone: "1234567890",
+            });
+
+        const contactId = contactResponse.body.id;
+
+        const response = await request(app)
+            .get(`/leads/${leadId}/contacts/${contactId}`)
+            .set("Authorization", `Bearer ${bobToken}`);
+
+        expect(response.status).toBe(404);
+    });
+
+    it("does not allow one organization to delete another organization's contact", async () => {
+        const aliceToken = signAccessToken({
+            userId: 1,
+            organizationId: 1,
+            role: "owner",
+        });
+
+        const bobToken = signAccessToken({
+            userId: 2,
+            organizationId: 2,
+            role: "owner",
+        });
+
+        const leadResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Lead",
+                company: "Alice Company",
+                email: "alice-contact-delete@example.com",
+            });
+
+        const leadId = leadResponse.body.id;
+
+        const contactResponse = await request(app)
+            .post(`/leads/${leadId}/contacts`)
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Contact",
+                email: "alice-contact-delete@example.com",
+                phone: "1234567890",
+            });
+
+        const contactId = contactResponse.body.id;
+
+        const response = await request(app)
+            .delete(`/leads/${leadId}/contacts/${contactId}`)
+            .set("Authorization", `Bearer ${bobToken}`);
+
+        expect(response.status).toBe(404);
+    });
+
+    it("does not allow one organization to read another organization's deals", async () => {
+        const aliceToken = signAccessToken({
+            userId: 1,
+            organizationId: 1,
+            role: "owner",
+        });
+
+        const bobToken = signAccessToken({
+            userId: 2,
+            organizationId: 2,
+            role: "owner",
+        });
+
+        const leadResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Lead",
+                company: "Alice Company",
+                email: "alice-deal-list@example.com",
+            });
+
+        const leadId = leadResponse.body.id;
+
+        const dealResponse = await request(app)
+            .post(`/leads/${leadId}/deals`)
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                title: "Alice Deal",
+            });
+
+        expect(dealResponse.status).toBe(201);
+
+        const response = await request(app)
+            .get(`/leads/${leadId}/deals`)
+            .set("Authorization", `Bearer ${bobToken}`);
+
+        expect(response.status).toBe(404);
+    });
+
+    it("does not allow one organization to update another organization's deal", async () => {
+        const aliceToken = signAccessToken({
+            userId: 1,
+            organizationId: 1,
+            role: "owner",
+        });
+
+        const bobToken = signAccessToken({
+            userId: 2,
+            organizationId: 2,
+            role: "owner",
+        });
+
+        const leadResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Lead",
+                company: "Alice Company",
+                email: "alice-deal-update@example.com",
+            });
+
+        const leadId = leadResponse.body.id;
+
+        const dealResponse = await request(app)
+            .post(`/leads/${leadId}/deals`)
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                title: "Alice Deal",
+            });
+
+        const dealId = dealResponse.body.id;
+
+        const response = await request(app)
+            .patch(`/leads/${leadId}/deals/${dealId}/stage`)
+            .set("Authorization", `Bearer ${bobToken}`)
+            .send({
+                stage: "proposal",
+            });
+
+        expect(response.status).toBe(404);
+    });
+
+    it("does not allow one organization to delete another organization's deal", async () => {
+        const aliceToken = signAccessToken({
+            userId: 1,
+            organizationId: 1,
+            role: "owner",
+        });
+
+        const bobToken = signAccessToken({
+            userId: 2,
+            organizationId: 2,
+            role: "owner",
+        });
+
+        const leadResponse = await request(app)
+            .post("/leads")
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                name: "Alice Lead",
+                company: "Alice Company",
+                email: "alice-deal-delete@example.com",
+            });
+
+        const leadId = leadResponse.body.id;
+
+        const dealResponse = await request(app)
+            .post(`/leads/${leadId}/deals`)
+            .set("Authorization", `Bearer ${aliceToken}`)
+            .send({
+                title: "Alice Deal",
+            });
+
+        const dealId = dealResponse.body.id;
+
+        const response = await request(app)
+            .delete(`/leads/${leadId}/deals/${dealId}`)
+            .set("Authorization", `Bearer ${bobToken}`);
+
+        expect(response.status).toBe(404);
+    });
 });

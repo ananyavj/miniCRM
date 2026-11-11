@@ -105,3 +105,39 @@ export async function findCredentialsByEmail(email: string) {
         passwordHash: row.password_hash,
     };
 }
+
+export async function findUserById(id: number): Promise<User | undefined> {
+    const result = await pool.query<{
+        id: number;
+        organization_id: number;
+        name: string;
+        email: string;
+        role: "owner" | "member";
+    }>(
+        `
+        SELECT
+            id,
+            organization_id,
+            name,
+            email,
+            role
+        FROM users
+        WHERE id = $1
+        `,
+        [id],
+    );
+
+    const row = result.rows[0];
+
+    if (!row) {
+        return undefined;
+    }
+
+    return {
+        id: row.id,
+        organizationId: row.organization_id,
+        name: row.name,
+        email: row.email,
+        role: row.role,
+    };
+}
