@@ -1,3 +1,5 @@
+// src/middleware/auth.ts
+
 import type { Request, Response, NextFunction } from "express";
 import { AppError } from "../errors.js";
 import { verifyAccessToken } from "../modules/auth/token.js";

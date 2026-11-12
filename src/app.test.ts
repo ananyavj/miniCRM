@@ -1512,4 +1512,90 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(409);
         expect(response.body.error.code).toBe("EMAIL_ALREADY_REGISTERED");
     });
+    it("member cannot add another member", async () => {
+        const owner = await registerAndLogin(`owner-${Date.now()}@example.com`);
+
+        const memberResponse = await request(app)
+            .post("/users")
+            .set(owner.auth)
+            .send({
+                name: "Member",
+                email: `member-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(memberResponse.status).toBe(201);
+
+        const memberLogin = await request(app).post("/auth/login").send({
+            email: memberResponse.body.email,
+            password: "password123",
+        });
+
+        const response = await request(app)
+            .post("/users")
+            .set("Authorization", `Bearer ${memberLogin.body.accessToken}`)
+            .send({
+                name: "Another Member",
+                email: `another-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+    });
+    it("does not trust a forged owner role in the JWT", async () => {
+        const owner = await registerAndLogin(
+            `owner-forged-${Date.now()}@example.com`,
+        );
+
+        const memberResponse = await request(app)
+            .post("/users")
+            .set(owner.auth)
+            .send({
+                name: "Member",
+                email: `member-forged-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(memberResponse.status).toBe(201);
+
+        const memberLogin = await request(app).post("/auth/login").send({
+            email: memberResponse.body.email,
+            password: "password123",
+        });
+
+        expect(memberLogin.status).toBe(200);
+
+        const memberPayload = verifyAccessToken(memberLogin.body.accessToken);
+
+        const forgedToken = signAccessToken({
+            userId: memberPayload.userId,
+            organizationId: memberPayload.organizationId,
+            role: "owner",
+        });
+
+        const response = await request(app)
+            .post("/users")
+            .set("Authorization", `Bearer ${forgedToken}`)
+            .send({
+                name: "Another Member",
+                email: `another-member-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+    });
+    it("returns 401 before checking role when authentication is missing", async () => {
+        const response = await request(app)
+            .post("/users")
+            .send({
+                name: "Unauthorized User",
+                email: `unauthorized-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("AUTH_REQUIRED");
+    });
 });

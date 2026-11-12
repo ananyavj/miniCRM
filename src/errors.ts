@@ -24,6 +24,13 @@ export class NotFoundError extends AppError {
     }
 }
 
+export class ForbiddenError extends AppError {
+    constructor(message: string) {
+        super(403, "FORBIDDEN", message);
+        this.name = "ForbiddenError";
+    }
+}
+
 export class DuplicateIdError extends AppError {
     constructor(message: string) {
         super(409, "DUPLICATE_ID", message);

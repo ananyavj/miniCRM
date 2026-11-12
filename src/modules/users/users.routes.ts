@@ -4,6 +4,7 @@ import { validate } from "../../middleware/validate.js";
 import { listMembers } from "./users.service.js";
 import { createMemberSchema } from "./users.schemas.js";
 import { createMember } from "./users.service.js";
+import { requireRole } from "../../middleware/requireRole.js";
 
 const router = Router();
 
@@ -15,10 +16,18 @@ router.get("/", async (req, res) => {
     res.status(200).json(users);
 });
 
-router.post("/", validate(createMemberSchema, "body"), async (req, res) => {
-    const user = await createMember(res.locals.organizationId, res.locals.body);
+router.post(
+    "/",
+    requireRole("owner"),
+    validate(createMemberSchema, "body"),
+    async (req, res) => {
+        const user = await createMember(
+            res.locals.organizationId,
+            res.locals.body,
+        );
 
-    res.status(201).json(user);
-});
+        res.status(201).json(user);
+    },
+);
 
 export default router;
