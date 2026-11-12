@@ -1,3 +1,4 @@
+// src/modules/auth/auth.types.ts
 export type Organization = {
     id: number;
     name: string;

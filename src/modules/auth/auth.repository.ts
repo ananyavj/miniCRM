@@ -1,3 +1,4 @@
+// src/modules/auth/auth.repository.ts
 import { withTransaction } from "../../db/withTransaction.js";
 import { pool } from "../../db/pool.js";
 import type { RegisterInput } from "./auth.schemas.js";

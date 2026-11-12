@@ -20,6 +20,15 @@ Topics to re-do from memory, in order. A topic leaves the queue when you can wri
 | 14 | Debugging: first look where the error ORIGINATES (repository translation, service check), not where it is formatted (`errorHandler`) | Day 20: 4 of 7 first choices right | open |
 | 15 | Why rules live in the database at all (constraints as the last line of defence), and how Postgres enforces them on INSERT/UPDATE | Day 21: self-reported as the shakiest area | open |
 | 16 | Two databases, one migrate script: `dotenv/config` picks the DB from `DOTENV_CONFIG_PATH`, which stays set for the whole PowerShell window | Day 21: test DB was behind dev, tests failed until it was migrated | open |
+| 17 | `bcrypt.compare` checks a password against a stored hash at login. It has nothing to do with the JWT secret; `jwt.verify` uses `JWT_SECRET` from `config` (`.env` or `.env.test`) | Day 26: mixed up bcrypt and JWT verification | open |
+| 18 | `algorithms: ["HS256"]`: only accept the algorithm we sign with (blocks `alg: none` / algorithm confusion). JWT payloads never contain passwords or hashes | Day 26: B/C | open |
+| 19 | Login timing: an unknown email skips `bcrypt.compare` and answers faster, which can reveal which emails exist. Fix: compare against a dummy hash anyway | Day 26: C | open |
+| 20 | Layers: middleware and routes call SERVICES ("what are we doing"), services call REPOSITORIES ("how to talk to Postgres") | Day 26: C on why requireAuth calls a service | open |
+| 21 | Debugging: everything suddenly 401 -> check auth config (`JWT_SECRET` in `.env.test`) before database data. Register 500 instead of 409 -> the 23505 + constraint-name branch in `errorHandler` | Day 26 Part 5: B/C on both | open |
+| 22 | Where email is cleaned: Zod `.trim().toLowerCase()` in register AND login schemas, read from `res.locals.body` | Day 26 Part 5: B | open |
+| 23 | DB row vs API object: `RETURNING` lists only public columns AND the repository builds a new object without `password_hash` | Day 26 Part 5: A/B | open |
+| 24 | Exact schema details: the five `users` constraints from migration 005, and the columns/FKs of all five tables | Day 26: "some exact schema details" | open |
+| 25 | **Deferred from Day 26 (Part 4, not done): glance-then-reproduce the 8 pieces**: `validate`, `withTransaction`, `hashPassword`/`verifyPassword`, `RegistrationData` (Omit) + two INSERTs, `signAccessToken`, `login` service, `requireAuth`, `errorHandler` 23505 branch | Ananya was too tired on 2026-11-12; moved to Day 30 by her decision | open, Day 30 first block |
 
 ## Scratch: Day 16 blind-recall attempts (unreviewed; they contain typos, for example an unclosed string in `BEGIN`)
 

@@ -6,6 +6,7 @@ import { requestLogger } from "./middleware/requestLogger.js";
 import { ZodError } from "zod";
 import { pool } from "./db/pool.js";
 import authRoutes from "./modules/auth/auth.routes.js";
+import userRoutes from "./modules/users/users.routes.js";
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(requestLogger);
 app.use(express.json({ limit: "100kb" }));
 app.use("/auth", authRoutes);
 app.use("/leads", leadRoutes);
+app.use("/users", userRoutes);
 
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });

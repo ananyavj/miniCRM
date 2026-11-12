@@ -12,6 +12,27 @@ import { config } from "./config.js";
 let org1: { Authorization: string };
 let org2: { Authorization: string };
 
+async function registerAndLogin(email: string) {
+    await request(app).post("/auth/register").send({
+        organizationName: "Acme",
+        name: "Owner",
+        email,
+        password: "password123",
+    });
+
+    const loginResponse = await request(app).post("/auth/login").send({
+        email,
+        password: "password123",
+    });
+
+    return {
+        user: loginResponse.body.user,
+        auth: {
+            Authorization: `Bearer ${loginResponse.body.accessToken}`,
+        },
+    };
+}
+
 describe("MiniCRM API", () => {
     const aliceToken = signAccessToken({
         userId: 1,
@@ -1407,5 +1428,88 @@ describe("MiniCRM API", () => {
             .set("Authorization", `Bearer ${bobToken}`);
 
         expect(response.status).toBe(404);
+    });
+
+    it("owner can add a member", async () => {
+        const owner = await registerAndLogin("owner@acme.example.com");
+
+        const response = await request(app)
+            .post("/users")
+            .set(owner.auth)
+            .send({
+                name: "New Member",
+                email: "member@acme.example.com",
+                password: "password123",
+            });
+
+        expect(response.status).toBe(201);
+        expect(response.body.role).toBe("member");
+        expect(response.body.organizationId).toBe(owner.user.organizationId);
+        expect(response.body.password).toBeUndefined();
+        expect(response.body.passwordHash).toBeUndefined();
+    });
+
+    it("member can log in into the same organization", async () => {
+        const owner = await registerAndLogin("owner@acme.example.com");
+
+        const createResponse = await request(app)
+            .post("/users")
+            .set(owner.auth)
+            .send({
+                name: "New Member",
+                email: "member@acme.example.com",
+                password: "password123",
+            });
+
+        expect(createResponse.status).toBe(201);
+
+        const loginResponse = await request(app).post("/auth/login").send({
+            email: "member@acme.example.com",
+            password: "password123",
+        });
+
+        expect(loginResponse.status).toBe(200);
+
+        const memberToken = loginResponse.body.accessToken;
+        const memberPayload = verifyAccessToken(memberToken);
+
+        expect(memberPayload.organizationId).toBe(owner.user.organizationId);
+    });
+
+    it("GET /users only shows users from my organization", async () => {
+        const owner = await registerAndLogin("owner@acme.example.com");
+
+        await request(app).post("/users").set(owner.auth).send({
+            name: "New Member",
+            email: "member@acme.example.com",
+            password: "password123",
+        });
+
+        const response = await request(app).get("/users").set(owner.auth);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(2);
+        expect(
+            response.body.some(
+                (user: { email: string }) =>
+                    user.email === "alice@alpha.example.com",
+            ),
+        ).toBe(false);
+    });
+
+    it("duplicate email returns 409 EMAIL_ALREADY_REGISTERED", async () => {
+        const owner = await registerAndLogin("owner@acme.example.com");
+
+        const response = await request(app)
+            .post("/users")
+            .set(owner.auth)
+            .send({
+                name: "Alice",
+                email: "alice@alpha.example.com",
+                password: "password123",
+            });
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("EMAIL_ALREADY_REGISTERED");
     });
 });
