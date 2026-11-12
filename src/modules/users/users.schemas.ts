@@ -9,3 +9,13 @@ export const createMemberSchema = z
     .strict();
 
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
+
+export const userIdParamsSchema = z.object({
+    id: z.coerce.number().int().positive(),
+});
+
+export const changeRoleSchema = z
+    .object({
+        role: z.enum(["owner", "member"]),
+    })
+    .strict();

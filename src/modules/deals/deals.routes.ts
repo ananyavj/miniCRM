@@ -13,6 +13,7 @@ import {
     deleteDeal,
     changeStage,
 } from "./deals.service.js";
+import { requireRole } from "../../middleware/requireRole.js";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -55,6 +56,7 @@ router.patch(
 
 router.delete(
     "/:id",
+    requireRole("owner"),
     validate(dealParamsSchema, "params"),
     async (_req, res) => {
         const orgId = res.locals.organizationId;

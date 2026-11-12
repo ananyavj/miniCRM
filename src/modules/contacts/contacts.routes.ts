@@ -15,6 +15,7 @@ import {
     updateContact,
     deleteContact,
 } from "./contacts.service.js";
+import { requireRole } from "../../middleware/requireRole.js";
 
 const router = Router({ mergeParams: true });
 router.use(requireAuth);
@@ -65,6 +66,7 @@ router.patch(
 
 router.delete(
     "/:id",
+    requireRole("owner"),
     validate(contactParamsSchema, "params"),
     async (_req, res) => {
         const orgId = res.locals.organizationId;

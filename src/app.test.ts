@@ -11,6 +11,7 @@ import { config } from "./config.js";
 
 let org1: { Authorization: string };
 let org2: { Authorization: string };
+let org1Member: { Authorization: string };
 
 async function registerAndLogin(email: string) {
     await request(app).post("/auth/register").send({
@@ -53,6 +54,17 @@ describe("MiniCRM API", () => {
     org2 = {
         Authorization: `Bearer ${bobToken}`,
     };
+
+    const carolToken = signAccessToken({
+        userId: 3,
+        organizationId: 1,
+        role: "member",
+    });
+
+    org1Member = {
+        Authorization: `Bearer ${carolToken}`,
+    };
+
     beforeEach(async () => {
         const databaseUrl = process.env.DATABASE_URL;
 
@@ -76,11 +88,18 @@ describe("MiniCRM API", () => {
                     ('Test Organization Beta')`,
         );
 
+        // Alice and Bob are owners so existing delete tests can pass
+        // the new owner-only authorization middleware.
         await pool.query(
-            `INSERT INTO users (organization_id, name, email)
-            VALUES
-                (1, 'Alice', 'alice@alpha.example.com'),
-                (2, 'Bob', 'bob@beta.example.com')`,
+            `INSERT INTO users (organization_id, name, email, role)
+             VALUES
+                (1, 'Alice', 'alice@alpha.example.com', 'owner'),
+                (2, 'Bob', 'bob@beta.example.com', 'owner')`,
+        );
+
+        await pool.query(
+            `INSERT INTO users (organization_id, name, email, password_hash, role)
+             VALUES (1, 'Carol', 'carol@alpha.example.com', '$2b$12$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'member')`,
         );
     });
 
@@ -219,6 +238,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(400);
         expect(response.body.error.code).toBe("VALIDATION_ERROR");
     });
+
     it("maps a PostgreSQL status constraint violation to 400", async () => {
         await expect(
             pool.query(
@@ -660,6 +680,7 @@ describe("MiniCRM API", () => {
         expect(leadResponse.status).toBe(200);
         expect(leadResponse.body.id).toBe(createdLead.body.id);
     });
+
     it("creates a deal with the default stage and value", async () => {
         const createdLead = await request(app).post("/leads").set(org1).send({
             name: "Deal Test Lead",
@@ -868,6 +889,7 @@ describe("MiniCRM API", () => {
             "SELECT password_hash FROM users WHERE email = $1",
             ["alice@example.com"],
         );
+
         const storedHash: string = stored.rows[0].password_hash;
 
         expect(storedHash).not.toBe("password123");
@@ -918,6 +940,7 @@ describe("MiniCRM API", () => {
             "SELECT COUNT(*)::int AS count FROM users WHERE email = $1",
             ["weak@example.com"],
         );
+
         expect(users.rows[0].count).toBe(0);
     });
 
@@ -1048,6 +1071,7 @@ describe("MiniCRM API", () => {
             expect(response.body.error.code).toBe("AUTH_REQUIRED");
         },
     );
+
     it("rejects a tampered token", async () => {
         const parts = aliceToken.split(".");
 
@@ -1062,6 +1086,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(401);
         expect(response.body.error.code).toBe("INVALID_TOKEN");
     });
+
     it("rejects an expired token", async () => {
         const expiredToken = jwt.sign(
             {
@@ -1083,6 +1108,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(401);
         expect(response.body.error.code).toBe("INVALID_TOKEN");
     });
+
     it("uses the login token for authenticated lead requests", async () => {
         const email = `day24-${Date.now()}@example.com`;
         const password = "Password123!";
@@ -1150,6 +1176,7 @@ describe("MiniCRM API", () => {
             ]),
         );
     });
+
     it("rejects a token whose user no longer exists", async () => {
         const token = signAccessToken({
             userId: 999999,
@@ -1179,6 +1206,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(401);
         expect(response.body.error.code).toBe("INVALID_TOKEN");
     });
+
     it("does not allow one organization to read another organization's contacts", async () => {
         const aliceToken = signAccessToken({
             userId: 1,
@@ -1512,6 +1540,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(409);
         expect(response.body.error.code).toBe("EMAIL_ALREADY_REGISTERED");
     });
+
     it("member cannot add another member", async () => {
         const owner = await registerAndLogin(`owner-${Date.now()}@example.com`);
 
@@ -1543,6 +1572,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(403);
         expect(response.body.error.code).toBe("FORBIDDEN");
     });
+
     it("does not trust a forged owner role in the JWT", async () => {
         const owner = await registerAndLogin(
             `owner-forged-${Date.now()}@example.com`,
@@ -1586,6 +1616,7 @@ describe("MiniCRM API", () => {
         expect(response.status).toBe(403);
         expect(response.body.error.code).toBe("FORBIDDEN");
     });
+
     it("returns 401 before checking role when authentication is missing", async () => {
         const response = await request(app)
             .post("/users")
@@ -1597,5 +1628,126 @@ describe("MiniCRM API", () => {
 
         expect(response.status).toBe(401);
         expect(response.body.error.code).toBe("AUTH_REQUIRED");
+    });
+    it("promotes a member to owner and the existing token works immediately", async () => {
+        const promoteResponse = await request(app)
+            .patch("/users/3/role")
+            .set(org1)
+            .send({
+                role: "owner",
+            });
+
+        expect(promoteResponse.status).toBe(200);
+        expect(promoteResponse.body.role).toBe("owner");
+        expect(promoteResponse.body.organizationId).toBe(1);
+        expect(promoteResponse.body).not.toHaveProperty("organization_id");
+
+        // Carol's token was created while she was a member.
+        // requireAuth reads her current role from the database.
+        const memberResponse = await request(app)
+            .post("/users")
+            .set(org1Member)
+            .send({
+                name: "Another Member",
+                email: `another-member-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(memberResponse.status).toBe(201);
+    });
+
+    it("prevents the last owner from stepping down", async () => {
+        const response = await request(app)
+            .patch("/users/1/role")
+            .set(org1)
+            .send({
+                role: "member",
+            });
+
+        expect(response.status).toBe(409);
+        expect(response.body.error.code).toBe("LAST_OWNER");
+
+        const result = await pool.query(
+            `
+            SELECT role
+            FROM users
+            WHERE id = 1
+            `,
+        );
+
+        expect(result.rows[0].role).toBe("owner");
+    });
+
+    it("allows an owner to step down when another owner remains", async () => {
+        const promoteResponse = await request(app)
+            .patch("/users/3/role")
+            .set(org1)
+            .send({
+                role: "owner",
+            });
+
+        expect(promoteResponse.status).toBe(200);
+        expect(promoteResponse.body.role).toBe("owner");
+
+        const demoteResponse = await request(app)
+            .patch("/users/1/role")
+            .set(org1)
+            .send({
+                role: "member",
+            });
+
+        expect(demoteResponse.status).toBe(200);
+        expect(demoteResponse.body.role).toBe("member");
+    });
+
+    it("does not allow members to change roles", async () => {
+        const response = await request(app)
+            .patch("/users/1/role")
+            .set(org1Member)
+            .send({
+                role: "owner",
+            });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+    });
+
+    it("does not allow changing a user role across organizations", async () => {
+        const response = await request(app)
+            .patch("/users/2/role")
+            .set(org1)
+            .send({
+                role: "member",
+            });
+
+        expect(response.status).toBe(404);
+    });
+
+    it("does not allow members to delete leads", async () => {
+        const createResponse = await request(app)
+            .post("/leads")
+            .set(org1)
+            .send({
+                name: "Delete Permission Test",
+                company: "Permission Test",
+                email: `delete-permission-${Date.now()}@example.com`,
+            });
+
+        expect(createResponse.status).toBe(201);
+
+        const leadId = createResponse.body.id;
+
+        const deleteResponse = await request(app)
+            .delete(`/leads/${leadId}`)
+            .set(org1Member);
+
+        expect(deleteResponse.status).toBe(403);
+        expect(deleteResponse.body.error.code).toBe("FORBIDDEN");
+
+        const getResponse = await request(app)
+            .get(`/leads/${leadId}`)
+            .set(org1);
+
+        expect(getResponse.status).toBe(200);
     });
 });

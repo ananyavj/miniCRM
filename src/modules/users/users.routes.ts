@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
-import { listMembers } from "./users.service.js";
-import { createMemberSchema } from "./users.schemas.js";
-import { createMember } from "./users.service.js";
 import { requireRole } from "../../middleware/requireRole.js";
+import { changeRole, createMember, listMembers } from "./users.service.js";
+import {
+    createMemberSchema,
+    changeRoleSchema,
+    userIdParamsSchema,
+} from "./users.schemas.js";
 
 const router = Router();
 
@@ -30,4 +33,19 @@ router.post(
     },
 );
 
+router.patch(
+    "/:id/role",
+    requireRole("owner"),
+    validate(userIdParamsSchema, "params"),
+    validate(changeRoleSchema, "body"),
+    async (req, res) => {
+        const user = await changeRole(
+            res.locals.organizationId,
+            res.locals.params.id,
+            res.locals.body.role,
+        );
+
+        res.status(200).json(user);
+    },
+);
 export default router;

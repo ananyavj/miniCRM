@@ -1,6 +1,11 @@
 import { hashPassword } from "../auth/password.js";
-import { createUser, listUsersByOrg } from "./users.repository.js";
+import {
+    changeUserRole,
+    createUser,
+    listUsersByOrg,
+} from "./users.repository.js";
 import type { CreateMemberInput } from "./users.schemas.js";
+import type { Role } from "../auth/auth.types.js";
 
 export async function createMember(
     organizationId: number,
@@ -17,4 +22,12 @@ export async function createMember(
 
 export async function listMembers(organizationId: number) {
     return listUsersByOrg(organizationId);
+}
+
+export async function changeRole(
+    organizationId: number,
+    userId: number,
+    role: Role,
+) {
+    return changeUserRole(organizationId, userId, role);
 }

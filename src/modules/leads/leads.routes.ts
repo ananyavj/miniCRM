@@ -19,6 +19,7 @@ import {
 import { requireAuth } from "../../middleware/auth.js";
 import contactRoutes from "../contacts/contacts.routes.js";
 import dealRoutes from "../deals/deals.routes.js";
+import { requireRole } from "../../middleware/requireRole.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -74,11 +75,16 @@ router.patch(
         res.status(200).json(updatedLead);
     },
 );
-router.delete("/:id", validate(leadIdSchema, "params"), async (req, res) => {
-    const organizationId: number = res.locals.organizationId;
-    const { id } = res.locals.params;
-    await deleteLead(organizationId, id);
-    res.status(204).end();
-});
+router.delete(
+    "/:id",
+    requireRole("owner"),
+    validate(leadIdSchema, "params"),
+    async (req, res) => {
+        const organizationId: number = res.locals.organizationId;
+        const { id } = res.locals.params;
+        await deleteLead(organizationId, id);
+        res.status(204).end();
+    },
+);
 
 export default router;
