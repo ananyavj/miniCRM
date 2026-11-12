@@ -1750,4 +1750,205 @@ describe("MiniCRM API", () => {
 
         expect(getResponse.status).toBe(200);
     });
+    // ---------- Day 31: attack tests ----------
+
+    // Proves: a member can't promote themselves to owner.
+    it("does not let a member promote themselves", async () => {
+        const response = await request(app)
+            .patch("/users/3/role")
+            .set(org1Member)
+            .send({ role: "owner" });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+
+        const result = await pool.query("SELECT role FROM users WHERE id = 3");
+        expect(result.rows[0].role).toBe("member");
+    });
+
+    // Proves: losing a role takes effect immediately, even with an old token.
+    it("removes owner rights immediately after a demotion", async () => {
+        // Alice promotes Carol, then Carol (now owner) demotes Alice.
+        const promote = await request(app)
+            .patch("/users/3/role")
+            .set(org1)
+            .send({ role: "owner" });
+        expect(promote.status).toBe(200);
+
+        const demote = await request(app)
+            .patch("/users/1/role")
+            .set(org1Member)
+            .send({ role: "member" });
+        expect(demote.status).toBe(200);
+
+        // Alice's token still SAYS owner, but the database says member.
+        const response = await request(app)
+            .post("/users")
+            .set(org1)
+            .send({
+                name: "Should Fail",
+                email: `should-fail-${Date.now()}@example.com`,
+                password: "password123",
+            });
+
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+    });
+
+    // Proves: members can't delete contacts or deals either, and nothing is deleted.
+    it.each([
+        ["contact", "/leads/1/contacts/1", "contacts"],
+        ["deal", "/leads/1/deals/1", "deals"],
+    ])("does not let a member delete a %s", async (_label, path, table) => {
+        const lead = await request(app).post("/leads").set(org1).send({
+            name: "Permission Lead",
+            company: "Permission Co",
+            email: "permission-lead@example.com",
+        });
+        expect(lead.status).toBe(201);
+
+        await request(app).post("/leads/1/contacts").set(org1).send({
+            name: "Permission Contact",
+            email: "permission-contact@example.com",
+            phone: "1234567890",
+        });
+        await request(app)
+            .post("/leads/1/deals")
+            .set(org1)
+            .send({ title: "Permission Deal" });
+
+        const response = await request(app).delete(path).set(org1Member);
+
+        expect(response.status).toBe(403);
+        expect(response.body.error.code).toBe("FORBIDDEN");
+
+        const count = await pool.query(
+            `SELECT COUNT(*)::int AS count FROM ${table}`,
+        );
+        expect(count.rows[0].count).toBe(1);
+    });
+
+    // Proves: Bob can't reach Alice's contact by putting HIS OWN lead ID in the path.
+    it("does not let a user mix their own lead ID with another organization's contact ID", async () => {
+        await request(app).post("/leads").set(org1).send({
+            name: "Alice Lead",
+            company: "Alice Co",
+            email: "alice-idor@example.com",
+        }); // lead 1 (org 1)
+        await request(app).post("/leads/1/contacts").set(org1).send({
+            name: "Alice Contact",
+            email: "alice-idor-contact@example.com",
+            phone: "1234567890",
+        }); // contact 1 (org 1)
+        await request(app).post("/leads").set(org2).send({
+            name: "Bob Lead",
+            company: "Bob Co",
+            email: "bob-idor@example.com",
+        }); // lead 2 (org 2)
+
+        const response = await request(app)
+            .get("/leads/2/contacts/1")
+            .set(org2);
+
+        expect(response.status).toBe(404);
+    });
+
+    // Proves: the same trick doesn't work for deals.
+    it("does not let a user mix their own lead ID with another organization's deal ID", async () => {
+        await request(app).post("/leads").set(org1).send({
+            name: "Alice Lead",
+            company: "Alice Co",
+            email: "alice-idor-deal@example.com",
+        }); // lead 1 (org 1)
+        await request(app)
+            .post("/leads/1/deals")
+            .set(org1)
+            .send({ title: "Alice Deal" }); // deal 1 (org 1)
+        await request(app).post("/leads").set(org2).send({
+            name: "Bob Lead",
+            company: "Bob Co",
+            email: "bob-idor-deal@example.com",
+        }); // lead 2 (org 2)
+
+        const response = await request(app)
+            .patch("/leads/2/deals/1/stage")
+            .set(org2)
+            .send({ stage: "proposal" });
+
+        expect(response.status).toBe(404);
+    });
+
+    // Proves: you can't smuggle a role or an organization in through the request body.
+    // .strict() schemas reject any field they don't know.
+    it.each([
+        [
+            "role on POST /users",
+            "/users",
+            "owner",
+            {
+                name: "Sneaky",
+                email: "sneaky@alpha.example.com",
+                password: "password123",
+                role: "owner",
+            },
+        ],
+        [
+            "organizationId on POST /leads",
+            "/leads",
+            "owner",
+            {
+                name: "Sneaky Lead",
+                company: "Sneaky Co",
+                email: "sneaky-lead@example.com",
+                organizationId: 2,
+            },
+        ],
+        [
+            "role on POST /auth/register",
+            "/auth/register",
+            "none",
+            {
+                organizationName: "Sneaky Org",
+                name: "Sneaky",
+                email: "sneaky-register@example.com",
+                password: "password123",
+                role: "member",
+            },
+        ],
+    ])(
+        "rejects an extra field that tries to set %s",
+        async (_label, path, who, body) => {
+            const response =
+                who === "owner"
+                    ? await request(app).post(path).set(org1).send(body)
+                    : await request(app).post(path).send(body);
+
+            expect(response.status).toBe(400);
+            expect(response.body.error.code).toBe("VALIDATION_ERROR");
+        },
+    );
+
+    // Proves: an unsigned token ("alg": "none") is rejected.
+    // This is exactly why verifyAccessToken passes algorithms: ["HS256"].
+    it("rejects an unsigned token with alg none", async () => {
+        const header = Buffer.from(
+            JSON.stringify({ alg: "none", typ: "JWT" }),
+        ).toString("base64url");
+        const payload = Buffer.from(
+            JSON.stringify({
+                sub: "1",
+                org: 1,
+                role: "owner",
+                exp: Math.floor(Date.now() / 1000) + 3600,
+            }),
+        ).toString("base64url");
+        const unsignedToken = `${header}.${payload}.`;
+
+        const response = await request(app)
+            .get("/leads")
+            .set("Authorization", `Bearer ${unsignedToken}`);
+
+        expect(response.status).toBe(401);
+        expect(response.body.error.code).toBe("INVALID_TOKEN");
+    });
 });
