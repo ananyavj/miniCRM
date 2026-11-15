@@ -9,6 +9,7 @@ import {
     assignLeadToUser,
 } from "./leads.repository.js";
 import { NotFoundError, ValidationError } from "../../errors.js";
+import type { ListLeadsQuery } from "./leads.schemas.js";
 
 export async function getLeadById(
     organizationId: number,
@@ -70,9 +71,9 @@ export async function deleteLead(
 
 export async function listLeads(
     organizationId: number,
-    status?: LeadStatus,
-): Promise<Lead[]> {
-    return listLeadsByOrg(organizationId, status);
+    query: ListLeadsQuery,
+): Promise<{ items: Lead[]; total: number }> {
+    return listLeadsByOrg(organizationId, query);
 }
 
 export async function assignLead(

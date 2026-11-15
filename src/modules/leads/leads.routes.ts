@@ -28,9 +28,14 @@ router.use("/:leadId/deals", dealRoutes);
 
 router.get("/", validate(listLeadsQuerySchema, "query"), async (req, res) => {
     const organizationId: number = res.locals.organizationId;
-    const { status } = res.locals.query;
-    const leads = await listLeads(organizationId, status);
-    res.status(200).json(leads);
+    const query = res.locals.query;
+    const { items, total } = await listLeads(organizationId, query);
+    res.status(200).json({
+        items,
+        total,
+        page: query.page,
+        limit: query.limit,
+    });
 });
 
 router.get("/:id", validate(leadIdSchema, "params"), async (req, res) => {

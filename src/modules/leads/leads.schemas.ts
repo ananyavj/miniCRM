@@ -27,8 +27,16 @@ export const leadIdSchema = z
 export const listLeadsQuerySchema = z
     .object({
         status: leadStatusSchema.optional(),
+        q: z.string().trim().min(1).max(100).optional(),
+        assignedTo: z.coerce.number().int().positive().optional(),
+        sort: z.enum(["id", "name", "company", "createdAt"]).default("id"),
+        order: z.enum(["asc", "desc"]).default("asc"),
+        limit: z.coerce.number().int().min(1).max(100).default(20),
+        page: z.coerce.number().int().min(1).default(1),
     })
     .strict();
+
+export type ListLeadsQuery = z.infer<typeof listLeadsQuerySchema>;
 
 export const assignLeadSchema = z
     .object({

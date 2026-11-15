@@ -5,6 +5,7 @@ import { NotFoundError, ValidationError, ConflictError } from "../../errors.js";
 import { isPgConstraintError } from "../../db/pgErrors.js";
 import type { Lead, LeadStatus } from "./leads.types.js";
 import { pool } from "../../db/pool.js";
+import type { ListLeadsQuery } from "./leads.schemas.js";
 
 type LeadRow = {
     id: number;
@@ -28,19 +29,44 @@ function mapLeadRow(row: LeadRow): Lead {
     };
 }
 
+const SORT_COLUMNS = {
+    id: "id",
+    name: "name",
+    company: "company",
+    createdAt: "created_at",
+} as const;
+
 export async function listLeadsByOrg(
     organizationId: number,
-    status?: LeadStatus,
-): Promise<Lead[]> {
-    const result = await pool.query<LeadRow>(
-        `SELECT id, name, email, company, phone, status, assigned_to
+    query: ListLeadsQuery,
+): Promise<{ items: Lead[]; total: number }> {
+    const column = SORT_COLUMNS[query.sort];
+    const direction = query.order === "desc" ? "DESC" : "ASC";
+    const offset = (query.page - 1) * query.limit;
+
+    const result = await pool.query<LeadRow & { total: number }>(
+        `SELECT id, name, email, company, phone, status, assigned_to,
+            COUNT(*) OVER():: int AS total
         FROM leads
         WHERE organization_id = $1
             AND ($2 :: text IS NULL OR status = $2)
-        ORDER BY id`,
-        [organizationId, status ?? null],
+            AND ($3 :: text IS NULL OR name ILIKE $3 OR email ILIKE $3 OR company ILIKE $3)
+            AND ($4 :: int IS NULL OR assigned_to = $4)
+        ORDER BY ${column} ${direction}, id ASC
+        LIMIT $5 OFFSET $6`,
+        [
+            organizationId,
+            query.status ?? null,
+            query.q ? `%${query.q}%` : null,
+            query.assignedTo ?? null,
+            query.limit,
+            offset,
+        ],
     );
-    return result.rows.map(mapLeadRow);
+    return {
+        items: result.rows.map(mapLeadRow),
+        total: result.rows[0]?.total ?? 0,
+    };
 }
 
 export async function findLeadById(

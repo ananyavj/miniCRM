@@ -136,7 +136,7 @@ describe("MiniCRM API", () => {
         const response = await request(app).get("/leads").set(org1);
 
         expect(response.status).toBe(200);
-        expect(response.body).toEqual([]);
+        expect(response.body.items).toEqual([]);
     });
 
     it("returns 404 for a missing lead", async () => {
@@ -1154,7 +1154,7 @@ describe("MiniCRM API", () => {
 
         expect(listResponse.status).toBe(200);
 
-        expect(listResponse.body).toEqual(
+        expect(listResponse.body.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
                     id: leadId,
@@ -1168,7 +1168,7 @@ describe("MiniCRM API", () => {
 
         expect(aliceResponse.status).toBe(200);
 
-        expect(aliceResponse.body).not.toEqual(
+        expect(aliceResponse.body.items).not.toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
                     id: leadId,
@@ -1950,5 +1950,187 @@ describe("MiniCRM API", () => {
 
         expect(response.status).toBe(401);
         expect(response.body.error.code).toBe("INVALID_TOKEN");
+    });
+
+    // ---------- Days 32-33: search, filter, sort, paginate ----------
+
+    async function createLeadsAs(
+        auth: { Authorization: string },
+        leads: { name: string; company: string; email: string }[],
+    ) {
+        for (const lead of leads) {
+            const response = await request(app)
+                .post("/leads")
+                .set(auth)
+                .send(lead);
+            expect(response.status).toBe(201);
+        }
+    }
+
+    // Proves: q searches name, company AND email, ignoring capital letters.
+    it("searches leads by name, company or email", async () => {
+        await createLeadsAs(org1, [
+            {
+                name: "Ravi Kumar",
+                company: "Globex",
+                email: "ravi@globex.example.com",
+            },
+            {
+                name: "Sara Lee",
+                company: "Initech",
+                email: "sara@initech.example.com",
+            },
+            {
+                name: "Tom Hall",
+                company: "Umbrella",
+                email: "tom@globexpartner.example.com",
+            },
+        ]);
+
+        const response = await request(app).get("/leads?q=GLOBEX").set(org1);
+
+        expect(response.status).toBe(200);
+        expect(
+            response.body.items.map((lead: { name: string }) => lead.name),
+        ).toEqual(["Ravi Kumar", "Tom Hall"]);
+        expect(response.body.total).toBe(2);
+    });
+
+    // Proves: assignedTo filters to one user's leads.
+    it("filters leads by assigned user", async () => {
+        await createLeadsAs(org1, [
+            {
+                name: "Assigned",
+                company: "A Co",
+                email: "assigned@example.com",
+            },
+            {
+                name: "Unassigned",
+                company: "B Co",
+                email: "unassigned@example.com",
+            },
+        ]);
+
+        const assign = await request(app)
+            .patch("/leads/1/assignment")
+            .set(org1)
+            .send({ userId: 3 });
+        expect(assign.status).toBe(200);
+
+        const response = await request(app)
+            .get("/leads?assignedTo=3")
+            .set(org1);
+
+        expect(response.status).toBe(200);
+        expect(response.body.items).toHaveLength(1);
+        expect(response.body.items[0].name).toBe("Assigned");
+    });
+
+    // Proves: filters combine, and another organization's lead never appears.
+    it("combines status and search without leaking other organizations", async () => {
+        await createLeadsAs(org1, [
+            {
+                name: "Ravi Kumar",
+                company: "Globex",
+                email: "ravi@globex.example.com",
+            },
+        ]);
+        await createLeadsAs(org2, [
+            {
+                name: "Rita Globe",
+                company: "Globex",
+                email: "rita@globex.example.com",
+            },
+        ]);
+
+        const update = await request(app)
+            .patch("/leads/1")
+            .set(org1)
+            .send({ status: "contacted" });
+        expect(update.status).toBe(200);
+
+        const contacted = await request(app)
+            .get("/leads?q=globex&status=contacted")
+            .set(org1);
+        expect(contacted.body.items).toHaveLength(1);
+        expect(contacted.body.items[0].name).toBe("Ravi Kumar");
+
+        const stillNew = await request(app)
+            .get("/leads?q=globex&status=new")
+            .set(org1);
+        expect(stillNew.body.items).toHaveLength(0);
+    });
+
+    // Proves: the default response shape and default page size.
+    it("returns items, total, page and limit by default", async () => {
+        await createLeadsAs(org1, [
+            { name: "One", company: "C1", email: "one@example.com" },
+            { name: "Two", company: "C2", email: "two@example.com" },
+            { name: "Three", company: "C3", email: "three@example.com" },
+        ]);
+
+        const response = await request(app).get("/leads").set(org1);
+
+        expect(response.status).toBe(200);
+        expect(response.body.items).toHaveLength(3);
+        expect(response.body.total).toBe(3);
+        expect(response.body.page).toBe(1);
+        expect(response.body.limit).toBe(20);
+    });
+
+    // Proves: page 2 skips the first page, and total still counts everything.
+    it("returns the second page", async () => {
+        await createLeadsAs(org1, [
+            { name: "One", company: "C1", email: "one@example.com" },
+            { name: "Two", company: "C2", email: "two@example.com" },
+            { name: "Three", company: "C3", email: "three@example.com" },
+        ]);
+
+        const response = await request(app)
+            .get("/leads?limit=2&page=2")
+            .set(org1);
+
+        expect(response.status).toBe(200);
+        expect(response.body.items).toHaveLength(1);
+        expect(response.body.items[0].name).toBe("Three");
+        expect(response.body.total).toBe(3);
+        expect(response.body.page).toBe(2);
+        expect(response.body.limit).toBe(2);
+    });
+
+    // Proves: sort and order work together.
+    it("sorts leads by name descending", async () => {
+        await createLeadsAs(org1, [
+            { name: "Bravo", company: "C1", email: "bravo@example.com" },
+            { name: "Alpha", company: "C2", email: "alpha@example.com" },
+            { name: "Charlie", company: "C3", email: "charlie@example.com" },
+        ]);
+
+        const response = await request(app)
+            .get("/leads?sort=name&order=desc")
+            .set(org1);
+
+        expect(response.status).toBe(200);
+        expect(
+            response.body.items.map((lead: { name: string }) => lead.name),
+        ).toEqual(["Charlie", "Bravo", "Alpha"]);
+    });
+
+    // Proves: only whitelisted columns can be sorted on (no SQL through the URL).
+    it("rejects an unknown sort column", async () => {
+        const response = await request(app)
+            .get("/leads?sort=password_hash")
+            .set(org1);
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // Proves: nobody can ask for a million rows at once.
+    it("rejects a page size over 100", async () => {
+        const response = await request(app).get("/leads?limit=101").set(org1);
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
     });
 });
