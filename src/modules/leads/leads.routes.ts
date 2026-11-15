@@ -22,12 +22,14 @@ import contactRoutes from "../contacts/contacts.routes.js";
 import dealRoutes from "../deals/deals.routes.js";
 import { requireRole } from "../../middleware/requireRole.js";
 import activityRoutes from "../activities/activities.routes.js";
+import reminderRoutes from "../reminders/reminders.routes.js";
 
 const router = Router();
 router.use(requireAuth);
 router.use("/:leadId/contacts", contactRoutes);
 router.use("/:leadId/deals", dealRoutes);
 router.use("/:leadId/activities", activityRoutes);
+router.use("/:leadId/reminders", reminderRoutes);
 
 router.get("/", validate(listLeadsQuerySchema, "query"), async (req, res) => {
     const organizationId: number = res.locals.organizationId;

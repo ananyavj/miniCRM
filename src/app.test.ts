@@ -79,7 +79,7 @@ describe("MiniCRM API", () => {
         }
 
         await pool.query(
-            "TRUNCATE TABLE lead_status_history, activities, deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
+            "TRUNCATE TABLE reminders, lead_status_history, activities, deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
         );
 
         await pool.query(
@@ -2294,5 +2294,83 @@ describe("MiniCRM API", () => {
         const response = await request(app).get("/leads/1/history").set(org2);
 
         expect(response.status).toBe(404);
+    });
+
+    // ---------- Day 37: reminders ----------
+
+    // Proves: any timezone goes in; the SAME moment comes back in UTC.
+    // 09:00 in India (+05:30) is 03:30 UTC.
+    it("stores a reminder's moment and returns it in UTC", async () => {
+        await createOneLead(org1);
+
+        const response = await request(app)
+            .post("/leads/1/reminders")
+            .set(org1)
+            .send({ title: "Follow up", dueAt: "2030-01-15T09:00:00+05:30" });
+
+        expect(response.status).toBe(201);
+        expect(response.body.dueAt).toBe("2030-01-15T03:30:00.000Z");
+        expect(response.body.status).toBe("pending");
+        expect(response.body.sentAt).toBeNull();
+        expect(response.body.userId).toBe(1);
+        expect(response.body.leadId).toBe(1);
+    });
+
+    // Proves: times in the past, and times with no timezone, are rejected.
+    it.each([
+        ["in the past", "2020-01-01T00:00:00Z"],
+        ["without a timezone", "2030-01-15T09:00:00"],
+    ])("rejects a reminder due %s", async (_label, dueAt) => {
+        await createOneLead(org1);
+
+        const response = await request(app)
+            .post("/leads/1/reminders")
+            .set(org1)
+            .send({ title: "Bad time", dueAt });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // Proves: a reminder can be marked done, and the list comes back soonest first.
+    it("lists reminders soonest first and marks one as done", async () => {
+        await createOneLead(org1);
+        await request(app)
+            .post("/leads/1/reminders")
+            .set(org1)
+            .send({ title: "Later", dueAt: "2030-06-01T09:00:00Z" });
+        await request(app)
+            .post("/leads/1/reminders")
+            .set(org1)
+            .send({ title: "Sooner", dueAt: "2030-01-01T09:00:00Z" });
+
+        const list = await request(app).get("/leads/1/reminders").set(org1);
+        expect(list.status).toBe(200);
+        expect(
+            list.body.map((reminder: { title: string }) => reminder.title),
+        ).toEqual(["Sooner", "Later"]);
+
+        const done = await request(app)
+            .patch("/leads/1/reminders/1/done")
+            .set(org1);
+        expect(done.status).toBe(200);
+        expect(done.body.status).toBe("done");
+    });
+
+    // Proves: Bob can't see Alice's reminders or complete one of them.
+    it("hides another organization's reminders", async () => {
+        await createOneLead(org1);
+        await request(app)
+            .post("/leads/1/reminders")
+            .set(org1)
+            .send({ title: "Private", dueAt: "2030-01-15T09:00:00Z" });
+
+        const read = await request(app).get("/leads/1/reminders").set(org2);
+        expect(read.status).toBe(404);
+
+        const complete = await request(app)
+            .patch("/leads/1/reminders/1/done")
+            .set(org2);
+        expect(complete.status).toBe(404);
     });
 });
