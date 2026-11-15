@@ -10,3 +10,11 @@ export interface Lead {
     status: LeadStatus;
     assignedTo: number | null;
 }
+
+export interface LeadStatusChange {
+    id: number;
+    fromStatus: LeadStatus;
+    toStatus: LeadStatus;
+    changedBy: number | null;
+    changedAt: string;
+}

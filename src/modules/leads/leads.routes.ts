@@ -7,6 +7,7 @@ import {
     updateLeadStatus,
     deleteLead,
     assignLead,
+    getLeadHistory,
 } from "./leads.service.js";
 import { validate } from "../../middleware/validate.js";
 import {
@@ -47,6 +48,17 @@ router.get("/:id", validate(leadIdSchema, "params"), async (req, res) => {
     res.status(200).json(lead);
 });
 
+router.get(
+    "/:id/history",
+    validate(leadIdSchema, "params"),
+    async (req, res) => {
+        const organizationId: number = res.locals.organizationId;
+        const { id } = res.locals.params;
+        const history = await getLeadHistory(organizationId, id);
+        res.status(200).json(history);
+    },
+);
+
 router.post("/", validate(createLeadSchema, "body"), async (req, res) => {
     const organizationId: number = res.locals.organizationId;
     const input = res.locals.body;
@@ -62,8 +74,14 @@ router.patch(
         const organizationId: number = res.locals.organizationId;
         const { id } = res.locals.params;
         const { status } = res.locals.body;
+        const userId: number = res.locals.userId;
 
-        const updatedlead = await updateLeadStatus(organizationId, id, status);
+        const updatedlead = await updateLeadStatus(
+            organizationId,
+            id,
+            status,
+            userId,
+        );
         res.status(200).json(updatedlead);
     },
 );

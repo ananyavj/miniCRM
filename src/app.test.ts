@@ -79,7 +79,7 @@ describe("MiniCRM API", () => {
         }
 
         await pool.query(
-            "TRUNCATE TABLE activities, deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
+            "TRUNCATE TABLE lead_status_history, activities, deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
         );
 
         await pool.query(
@@ -2223,5 +2223,76 @@ describe("MiniCRM API", () => {
             .send({ type: "call", userId: 3 });
         expect(sneakyUser.status).toBe(400);
         expect(sneakyUser.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // ---------- Day 36: status history ----------
+
+    // Proves: a status change writes one history row with who / from / to.
+    it("records a status change in the history", async () => {
+        await createOneLead(org1);
+        const update = await request(app)
+            .patch("/leads/1")
+            .set(org1)
+            .send({ status: "contacted" });
+        expect(update.status).toBe(200);
+
+        const response = await request(app).get("/leads/1/history").set(org1);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0]).toEqual(
+            expect.objectContaining({
+                fromStatus: "new",
+                toStatus: "contacted",
+                changedBy: 1,
+            }),
+        );
+        expect(typeof response.body[0].changedAt).toBe("string");
+    });
+
+    // Proves: every change is kept, oldest first.
+    it("keeps the history in order", async () => {
+        await createOneLead(org1);
+        await request(app)
+            .patch("/leads/1")
+            .set(org1)
+            .send({ status: "contacted" });
+        await request(app)
+            .patch("/leads/1")
+            .set(org1)
+            .send({ status: "qualified" });
+
+        const response = await request(app).get("/leads/1/history").set(org1);
+
+        expect(
+            response.body.map(
+                (row: { fromStatus: string; toStatus: string }) =>
+                    `${row.fromStatus}->${row.toStatus}`,
+            ),
+        ).toEqual(["new->contacted", "contacted->qualified"]);
+    });
+
+    // Proves: "changing" to the same status is not recorded as a change.
+    it("does not record a change to the same status", async () => {
+        await createOneLead(org1);
+        const update = await request(app)
+            .patch("/leads/1")
+            .set(org1)
+            .send({ status: "new" });
+        expect(update.status).toBe(200);
+
+        const response = await request(app).get("/leads/1/history").set(org1);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(0);
+    });
+
+    // Proves: Bob can't read Alice's lead's history.
+    it("hides another organization's lead history", async () => {
+        await createOneLead(org1);
+
+        const response = await request(app).get("/leads/1/history").set(org2);
+
+        expect(response.status).toBe(404);
     });
 });

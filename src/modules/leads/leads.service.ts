@@ -1,5 +1,9 @@
 //src/modules/leads/leads.service.ts
-import { type Lead, type LeadStatus } from "./leads.types.js";
+import {
+    type Lead,
+    type LeadStatus,
+    type LeadStatusChange,
+} from "./leads.types.js";
 import {
     listLeadsByOrg,
     findLeadById,
@@ -7,6 +11,7 @@ import {
     updateLeadStatus as updateLeadStatusInDb,
     deleteLead as deleteLeadInDb,
     assignLeadToUser,
+    listLeadStatusHistory,
 } from "./leads.repository.js";
 import { NotFoundError, ValidationError } from "../../errors.js";
 import type { ListLeadsQuery } from "./leads.schemas.js";
@@ -49,13 +54,27 @@ export async function updateLeadStatus(
     organizationId: number,
     id: number,
     status: LeadStatus,
+    changedBy: number,
 ): Promise<Lead> {
-    const lead = await updateLeadStatusInDb(organizationId, id, status);
+    const lead = await updateLeadStatusInDb(
+        organizationId,
+        id,
+        status,
+        changedBy,
+    );
     if (!lead) {
         throw new NotFoundError(`Lead with ID ${id} not found.`);
     }
 
     return lead;
+}
+
+export async function getLeadHistory(
+    organizationId: number,
+    leadId: number,
+): Promise<LeadStatusChange[]> {
+    await getLeadById(organizationId, leadId);
+    return listLeadStatusHistory(organizationId, leadId);
 }
 
 export async function deleteLead(

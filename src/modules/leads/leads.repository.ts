@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import { withTransaction } from "../../db/withTransaction.js";
 import { NotFoundError, ValidationError, ConflictError } from "../../errors.js";
 import { isPgConstraintError } from "../../db/pgErrors.js";
-import type { Lead, LeadStatus } from "./leads.types.js";
+import type { Lead, LeadStatus, LeadStatusChange } from "./leads.types.js";
 import { pool } from "../../db/pool.js";
 import type { ListLeadsQuery } from "./leads.schemas.js";
 
@@ -121,22 +121,72 @@ export async function updateLeadStatus(
     organizationId: number,
     id: number,
     status: LeadStatus,
+    changedBy: number,
 ): Promise<Lead | undefined> {
-    const result = await pool.query<LeadRow>(
-        `UPDATE leads
-         SET status = $3
-         WHERE id = $1 AND organization_id = $2
-         RETURNING id, name, email, company, phone, status, assigned_to`,
-        [id, organizationId, status],
+    return withTransaction(async (client: PoolClient) => {
+        // 1. Lock the lead and read its CURRENT status.
+        const current = await client.query<{ status: LeadStatus }>(
+            `SELECT status
+             FROM leads
+             WHERE id = $1 AND organization_id = $2
+             FOR UPDATE`,
+            [id, organizationId],
+        );
+
+        const currentRow = current.rows[0];
+        if (!currentRow) {
+            return undefined;
+        }
+
+        // 2. Change the status.
+        const updated = await client.query<LeadRow>(
+            `UPDATE leads
+             SET status = $3
+             WHERE id = $1 AND organization_id = $2
+             RETURNING id, name, email, company, phone, status, assigned_to`,
+            [id, organizationId, status],
+        );
+
+        // 3. Record the change, but only if the status really changed.
+        if (currentRow.status !== status) {
+            await client.query(
+                `INSERT INTO lead_status_history
+                    (organization_id, lead_id, changed_by, from_status, to_status)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [organizationId, id, changedBy, currentRow.status, status],
+            );
+        }
+        return mapLeadRow(updated.rows[0]!);
+    });
+}
+
+type LeadStatusChangeRow = {
+    id: number;
+    changed_by: number | null;
+    from_status: LeadStatus;
+    to_status: LeadStatus;
+    changed_at: Date;
+};
+
+export async function listLeadStatusHistory(
+    organizationId: number,
+    leadId: number,
+): Promise<LeadStatusChange[]> {
+    const result = await pool.query<LeadStatusChangeRow>(
+        `SELECT id, changed_by, from_status, to_status, changed_at
+         FROM lead_status_history
+         WHERE organization_id = $1 AND lead_id = $2
+         ORDER BY changed_at, id`,
+        [organizationId, leadId],
     );
 
-    const row = result.rows[0];
-
-    if (!row) {
-        return undefined;
-    }
-
-    return mapLeadRow(row);
+    return result.rows.map((row) => ({
+        id: row.id,
+        fromStatus: row.from_status,
+        toStatus: row.to_status,
+        changedBy: row.changed_by,
+        changedAt: row.changed_at.toISOString(),
+    }));
 }
 
 export async function deleteLead(
