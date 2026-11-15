@@ -2463,13 +2463,10 @@ describe("MiniCRM API", () => {
     // Proves: Bob can't edit Alice's contact, and the contact is unchanged.
     it("does not let another organization update a contact", async () => {
         await createOneLead(org1);
-        await request(app)
-            .post("/leads/1/contacts")
-            .set(org1)
-            .send({
-                name: "Alice Contact",
-                email: "alice-contact@example.com",
-            });
+        await request(app).post("/leads/1/contacts").set(org1).send({
+            name: "Alice Contact",
+            email: "alice-contact@example.com",
+        });
 
         const response = await request(app)
             .patch("/leads/1/contacts/1")
