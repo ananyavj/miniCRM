@@ -8,6 +8,7 @@ import { withTransaction } from "./db/withTransaction.js";
 import { signAccessToken, verifyAccessToken } from "./modules/auth/token.js";
 import jwt from "jsonwebtoken";
 import { config } from "./config.js";
+import { processDueReminders } from "./modules/reminders/reminders.service.js";
 
 let org1: { Authorization: string };
 let org2: { Authorization: string };
@@ -2372,5 +2373,69 @@ describe("MiniCRM API", () => {
             .patch("/leads/1/reminders/1/done")
             .set(org2);
         expect(complete.status).toBe(404);
+    });
+
+    // ---------- Day 38: background job ----------
+    // These insert reminders straight into the database, because the API
+    // (correctly) refuses due dates in the past.
+
+    async function insertJobLead() {
+        await pool.query(
+            `INSERT INTO leads (organization_id, name, email, company)
+             VALUES (1, 'Job Lead', 'job@example.com', 'Job Co')`,
+        );
+    }
+
+    async function insertJobReminder(
+        title: string,
+        dueAtSql: string,
+        status = "pending",
+    ) {
+        await pool.query(
+            `INSERT INTO reminders (organization_id, lead_id, user_id, title, due_at, status)
+             VALUES (1, 1, 1, $1, ${dueAtSql}, $2)`,
+            [title, status],
+        );
+    }
+
+    // Proves: due reminders are sent; future ones are left alone.
+    it("sends due reminders and leaves future ones pending", async () => {
+        await insertJobLead();
+        await insertJobReminder("Past", "NOW() - interval '1 minute'");
+        await insertJobReminder("Future", "NOW() + interval '1 day'");
+
+        const sent = await processDueReminders();
+        expect(sent).toBe(1);
+
+        const rows = await pool.query(
+            "SELECT title, status, sent_at FROM reminders ORDER BY id",
+        );
+        expect(rows.rows[0].title).toBe("Past");
+        expect(rows.rows[0].status).toBe("sent");
+        expect(rows.rows[0].sent_at).not.toBeNull();
+        expect(rows.rows[1].title).toBe("Future");
+        expect(rows.rows[1].status).toBe("pending");
+        expect(rows.rows[1].sent_at).toBeNull();
+    });
+
+    // Proves: running the job again never sends the same reminder twice.
+    it("never sends a reminder twice", async () => {
+        await insertJobLead();
+        await insertJobReminder("Past", "NOW() - interval '1 minute'");
+
+        expect(await processDueReminders()).toBe(1);
+        expect(await processDueReminders()).toBe(0);
+    });
+
+    // Proves: reminders already marked done are never sent.
+    it("does not send reminders that are already done", async () => {
+        await insertJobLead();
+        await insertJobReminder(
+            "Done already",
+            "NOW() - interval '1 minute'",
+            "done",
+        );
+
+        expect(await processDueReminders()).toBe(0);
     });
 });

@@ -31,13 +31,6 @@ export class ForbiddenError extends AppError {
     }
 }
 
-export class DuplicateIdError extends AppError {
-    constructor(message: string) {
-        super(409, "DUPLICATE_ID", message);
-        this.name = "DuplicateIdError";
-    }
-}
-
 export class ValidationError extends AppError {
     constructor(message: string) {
         super(400, "VALIDATION_ERROR", message);

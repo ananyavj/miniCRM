@@ -72,3 +72,26 @@ export async function markReminderDone(
     const row = result.rows[0];
     return row ? mapReminderRow(row) : undefined;
 }
+
+export async function markDueRemindersSent(
+    now: Date,
+    limit: number,
+): Promise<Reminder[]> {
+    const result = await pool.query<ReminderRow>(
+        `
+        UPDATE reminders
+        SET status = 'sent', sent_at = NOW()
+        WHERE id IN (
+        SELECT id
+        FROM reminders
+        WHERE status = 'pending' AND due_at <= $1
+        ORDER BY due_at
+        LIMIT $2
+        FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, lead_id, user_id, title, due_at, status, sent_at`,
+        [now, limit],
+    );
+
+    return result.rows.map(mapReminderRow);
+}

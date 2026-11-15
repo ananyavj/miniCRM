@@ -168,7 +168,11 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
                 constraint === "leads_email_check" ||
                 constraint === "users_email_check" ||
                 constraint === "users_name_not_blank" ||
-                constraint === "users_role_check")
+                constraint === "users_role_check" ||
+                constraint === "activities_type_check" ||
+                constraint === "activities_note_not_blank" ||
+                constraint === "reminders_title_not_blank" ||
+                constraint === "reminders_status_check")
         ) {
             res.status(400).json({
                 error: {

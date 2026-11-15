@@ -6,7 +6,6 @@ import {
     dealParamsSchema,
     changeStageSchema,
 } from "./deals.schemas.js";
-import { requireAuth } from "../../middleware/auth.js";
 import {
     listDeals,
     createDeal,
@@ -15,8 +14,8 @@ import {
 } from "./deals.service.js";
 import { requireRole } from "../../middleware/requireRole.js";
 
+// requireAuth already runs in leads.routes.ts before this router is reached.
 const router = Router({ mergeParams: true });
-router.use(requireAuth);
 
 router.get("/", validate(leadParamsSchema, "params"), async (_req, res) => {
     const orgId = res.locals.organizationId;

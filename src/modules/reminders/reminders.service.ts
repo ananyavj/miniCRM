@@ -4,6 +4,7 @@ import {
     createReminder,
     listRemindersByLead,
     markReminderDone,
+    markDueRemindersSent,
 } from "./reminders.repository.js";
 import type { CreateReminderInput } from "./reminders.schemas.js";
 import type { Reminder } from "./reminders.types.js";
@@ -38,4 +39,20 @@ export async function completeReminder(
     }
 
     return reminder;
+}
+
+export async function processDueReminders(
+    now: Date = new Date(),
+    limit = 50,
+): Promise<number> {
+    const sent = await markDueRemindersSent(now, limit);
+
+    for (const reminder of sent) {
+        // A real app would send an email or a notification here.
+        console.log(
+            `Reminder ${reminder.id} for user ${reminder.userId}: ${reminder.title}`,
+        );
+    }
+
+    return sent.length;
 }
