@@ -79,7 +79,7 @@ describe("MiniCRM API", () => {
         }
 
         await pool.query(
-            "TRUNCATE TABLE deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
+            "TRUNCATE TABLE activities, deals, contacts, leads, users, organizations RESTART IDENTITY CASCADE",
         );
 
         await pool.query(
@@ -2132,5 +2132,96 @@ describe("MiniCRM API", () => {
 
         expect(response.status).toBe(400);
         expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // ---------- Day 35: activity log ----------
+
+    async function createOneLead(auth: { Authorization: string }) {
+        const response = await request(app)
+            .post("/leads")
+            .set(auth)
+            .send({
+                name: "Log Lead",
+                company: "Log Co",
+                email: `log-${Date.now()}@example.com`,
+            });
+        expect(response.status).toBe(201);
+        return response.body.id as number;
+    }
+
+    // Proves: an activity is saved with the logged-in user (from the token).
+    it("logs an activity on a lead", async () => {
+        await createOneLead(org1);
+
+        const response = await request(app)
+            .post("/leads/1/activities")
+            .set(org1)
+            .send({ type: "call", note: "Discussed pricing" });
+
+        expect(response.status).toBe(201);
+        expect(response.body).toEqual(
+            expect.objectContaining({
+                leadId: 1,
+                userId: 1,
+                type: "call",
+                note: "Discussed pricing",
+            }),
+        );
+        expect(typeof response.body.createdAt).toBe("string");
+    });
+
+    // Proves: the list comes back newest first.
+    it("lists activities newest first", async () => {
+        await createOneLead(org1);
+        await request(app)
+            .post("/leads/1/activities")
+            .set(org1)
+            .send({ type: "email" });
+        await request(app)
+            .post("/leads/1/activities")
+            .set(org1)
+            .send({ type: "meeting" });
+
+        const response = await request(app)
+            .get("/leads/1/activities")
+            .set(org1);
+
+        expect(response.status).toBe(200);
+        expect(
+            response.body.map((activity: { type: string }) => activity.type),
+        ).toEqual(["meeting", "email"]);
+    });
+
+    // Proves: Bob can neither read nor add to Alice's lead's log.
+    it("hides another organization's activities", async () => {
+        await createOneLead(org1);
+
+        const read = await request(app).get("/leads/1/activities").set(org2);
+        expect(read.status).toBe(404);
+
+        const write = await request(app)
+            .post("/leads/1/activities")
+            .set(org2)
+            .send({ type: "note", note: "Sneaky" });
+        expect(write.status).toBe(404);
+    });
+
+    // Proves: only the four known types are accepted, and userId can't be sent.
+    it("rejects an unknown activity type or a userId in the body", async () => {
+        await createOneLead(org1);
+
+        const badType = await request(app)
+            .post("/leads/1/activities")
+            .set(org1)
+            .send({ type: "telepathy" });
+        expect(badType.status).toBe(400);
+        expect(badType.body.error.code).toBe("VALIDATION_ERROR");
+
+        const sneakyUser = await request(app)
+            .post("/leads/1/activities")
+            .set(org1)
+            .send({ type: "call", userId: 3 });
+        expect(sneakyUser.status).toBe(400);
+        expect(sneakyUser.body.error.code).toBe("VALIDATION_ERROR");
     });
 });

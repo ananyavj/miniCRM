@@ -12,7 +12,7 @@
     "format:check": "prettier --check src",
     "lint": "eslint src",
     "migrate": "tsx src/db/migrate.ts",
-    "migrate:test": "tsx src/db/migrate.ts dotenv_config_path=.env.test"
+    "migrate:test": "tsx --env-file=.env.test src/db/migrate.ts"
   },
   "keywords": [],
   "author": "",

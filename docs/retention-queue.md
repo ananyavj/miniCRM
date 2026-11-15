@@ -28,6 +28,7 @@ Topics to re-do from memory, in order. A topic leaves the queue when you can wri
 | 22 | Where email is cleaned: Zod `.trim().toLowerCase()` in register AND login schemas, read from `res.locals.body` | Day 26 Part 5: B | open |
 | 23 | DB row vs API object: `RETURNING` lists only public columns AND the repository builds a new object without `password_hash` | Day 26 Part 5: A/B | open |
 | 24 | Exact schema details: the five `users` constraints from migration 005, and the columns/FKs of all five tables | Day 26: "some exact schema details" | open |
+| 26 | **Revisit in depth: `EXPLAIN ANALYZE` and indexes.** How to read a plan (`Seq Scan` vs `Index Scan` vs `Bitmap`, `Filter` vs `Index Cond`, `Rows Removed by Filter`, `actual time` vs `cost`), what `ANALYZE leads` does, why a composite index `(organization_id, status)` matches the list query, why `ILIKE '%x%'` can't use a btree index, why UNIQUE creates an index, and why indexes slow down writes | Day 34: Ananya understood a decent amount and asked to come back to it later | open |
 | 25 | **Deferred from Day 26 (Part 4, not done): glance-then-reproduce the 8 pieces**: `validate`, `withTransaction`, `hashPassword`/`verifyPassword`, `RegistrationData` (Omit) + two INSERTs, `signAccessToken`, `login` service, `requireAuth`, `errorHandler` 23505 branch | Ananya was too tired on 2026-11-12; moved to Day 30 by her decision | open, Day 30 first block |
 
 ## Scratch: Day 16 blind-recall attempts (unreviewed; they contain typos, for example an unclosed string in `BEGIN`)
