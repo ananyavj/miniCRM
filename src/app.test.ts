@@ -2438,4 +2438,122 @@ describe("MiniCRM API", () => {
 
         expect(await processDueReminders()).toBe(0);
     });
+
+    // ---------- Day 41: edge cases ----------
+
+    // Proves: a page past the end is empty, but total still counts every match,
+    // so the client can still show "3 leads" and offer page 1.
+    it("returns an empty page past the end but still reports the total", async () => {
+        await createLeadsAs(org1, [
+            { name: "One", company: "C1", email: "one@example.com" },
+            { name: "Two", company: "C2", email: "two@example.com" },
+            { name: "Three", company: "C3", email: "three@example.com" },
+        ]);
+
+        const response = await request(app)
+            .get("/leads?limit=2&page=5")
+            .set(org1);
+
+        expect(response.status).toBe(200);
+        expect(response.body.items).toEqual([]);
+        expect(response.body.total).toBe(3);
+        expect(response.body.page).toBe(5);
+    });
+
+    // Proves: Bob can't edit Alice's contact, and the contact is unchanged.
+    it("does not let another organization update a contact", async () => {
+        await createOneLead(org1);
+        await request(app)
+            .post("/leads/1/contacts")
+            .set(org1)
+            .send({
+                name: "Alice Contact",
+                email: "alice-contact@example.com",
+            });
+
+        const response = await request(app)
+            .patch("/leads/1/contacts/1")
+            .set(org2)
+            .send({ name: "Hacked" });
+        expect(response.status).toBe(404);
+
+        const check = await request(app).get("/leads/1/contacts/1").set(org1);
+        expect(check.body.name).toBe("Alice Contact");
+    });
+
+    // Proves: Bob can't assign Alice's lead (even to one of his own users).
+    it("does not let another organization assign a lead", async () => {
+        await createOneLead(org1);
+
+        const response = await request(app)
+            .patch("/leads/1/assignment")
+            .set(org2)
+            .send({ userId: 2 });
+        expect(response.status).toBe(404);
+
+        const check = await request(app).get("/leads/1").set(org1);
+        expect(check.body.assignedTo).toBeNull();
+    });
+
+    // Proves: only the two real roles exist; "admin" is rejected.
+    it("rejects an unknown role", async () => {
+        const response = await request(app)
+            .patch("/users/3/role")
+            .set(org1)
+            .send({ role: "admin" });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    // Proves: Bob's failed status change leaves no history row and no change.
+    it("records no history when another organization tries to change a status", async () => {
+        await createOneLead(org1);
+
+        const response = await request(app)
+            .patch("/leads/1")
+            .set(org2)
+            .send({ status: "lost" });
+        expect(response.status).toBe(404);
+
+        const history = await pool.query(
+            "SELECT COUNT(*)::int AS count FROM lead_status_history",
+        );
+        expect(history.rows[0].count).toBe(0);
+
+        const check = await request(app).get("/leads/1").set(org1);
+        expect(check.body.status).toBe("new");
+    });
+
+    // Proves: ON DELETE CASCADE. Deleting a lead also deletes its activities,
+    // status history and reminders (unlike contacts and deals, which block it).
+    it("deletes a lead's activities, history and reminders with it", async () => {
+        await createOneLead(org1);
+        await request(app)
+            .post("/leads/1/activities")
+            .set(org1)
+            .send({ type: "call" });
+        await request(app)
+            .patch("/leads/1")
+            .set(org1)
+            .send({ status: "contacted" });
+        await request(app)
+            .post("/leads/1/reminders")
+            .set(org1)
+            .send({ title: "Follow up", dueAt: "2030-01-15T09:00:00Z" });
+
+        const response = await request(app).delete("/leads/1").set(org1);
+        expect(response.status).toBe(204);
+
+        for (const table of [
+            "activities",
+            "lead_status_history",
+            "reminders",
+        ]) {
+            const count = await pool.query(
+                `SELECT COUNT(*)::int AS count FROM ${table}`,
+            );
+            expect(count.rows[0].count).toBe(0);
+        }
+    });
 });

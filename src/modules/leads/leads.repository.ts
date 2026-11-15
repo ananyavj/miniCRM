@@ -44,29 +44,42 @@ export async function listLeadsByOrg(
     const direction = query.order === "desc" ? "DESC" : "ASC";
     const offset = (query.page - 1) * query.limit;
 
+    // The filters, shared by both queries below.
+    const where = `
+        WHERE organization_id = $1
+          AND ($2::text IS NULL OR status = $2)
+          AND ($3::text IS NULL OR name ILIKE $3 OR email ILIKE $3 OR company ILIKE $3)
+          AND ($4::int IS NULL OR assigned_to = $4)`;
+
+    const filterValues = [
+        organizationId,
+        query.status ?? null,
+        query.q ? `%${query.q}%` : null,
+        query.assignedTo ?? null,
+    ];
+
     const result = await pool.query<LeadRow & { total: number }>(
         `SELECT id, name, email, company, phone, status, assigned_to,
-            COUNT(*) OVER():: int AS total
-        FROM leads
-        WHERE organization_id = $1
-            AND ($2 :: text IS NULL OR status = $2)
-            AND ($3 :: text IS NULL OR name ILIKE $3 OR email ILIKE $3 OR company ILIKE $3)
-            AND ($4 :: int IS NULL OR assigned_to = $4)
-        ORDER BY ${column} ${direction}, id ASC
-        LIMIT $5 OFFSET $6`,
-        [
-            organizationId,
-            query.status ?? null,
-            query.q ? `%${query.q}%` : null,
-            query.assignedTo ?? null,
-            query.limit,
-            offset,
-        ],
+                COUNT(*) OVER()::int AS total
+         FROM leads
+         ${where}
+         ORDER BY ${column} ${direction}, id ASC
+         LIMIT $5 OFFSET $6`,
+        [...filterValues, query.limit, offset],
     );
-    return {
-        items: result.rows.map(mapLeadRow),
-        total: result.rows[0]?.total ?? 0,
-    };
+
+    const firstRow = result.rows[0];
+    if (firstRow) {
+        return { items: result.rows.map(mapLeadRow), total: firstRow.total };
+    }
+
+    // Empty page: no rows means no total to read, so count separately.
+    const countResult = await pool.query<{ total: number }>(
+        `SELECT COUNT(*)::int AS total FROM leads ${where}`,
+        filterValues,
+    );
+
+    return { items: [], total: countResult.rows[0]!.total };
 }
 
 export async function findLeadById(
