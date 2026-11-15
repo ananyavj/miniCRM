@@ -2553,4 +2553,336 @@ describe("MiniCRM API", () => {
             expect(count.rows[0].count).toBe(0);
         }
     });
+
+    // ---------- Day 42: test tables (matrices) ----------
+    // Instead of one test per route, each table below checks EVERY protected
+    // route against one rule, so a hole in any single route can't hide.
+
+    type HttpMethod = "get" | "post" | "patch" | "delete";
+    type Auth = { Authorization: string };
+    type Body = Record<string, unknown> | undefined;
+
+    // Sends one request; adds the token and body only if given.
+    function send(method: HttpMethod, path: string, auth?: Auth, body?: Body) {
+        let req = request(app)[method](path);
+        if (auth) {
+            req = req.set(auth);
+        }
+        return body ? req.send(body) : req;
+    }
+
+    // Alice (organization 1) gets: lead 1 with contact 1, deal 1 and
+    // reminder 1, plus an empty lead 2 (so it can be deleted).
+    async function seedAliceRecords() {
+        const lead1 = await send("post", "/leads", org1, {
+            name: "Matrix Lead",
+            company: "Matrix Co",
+            email: "matrix-lead@example.com",
+        });
+        expect(lead1.status).toBe(201);
+
+        const lead2 = await send("post", "/leads", org1, {
+            name: "Empty Lead",
+            company: "Empty Co",
+            email: "empty-lead@example.com",
+        });
+        expect(lead2.status).toBe(201);
+
+        const contact = await send("post", "/leads/1/contacts", org1, {
+            name: "Matrix Contact",
+            email: "matrix-contact@example.com",
+        });
+        expect(contact.status).toBe(201);
+
+        const deal = await send("post", "/leads/1/deals", org1, {
+            title: "Matrix Deal",
+        });
+        expect(deal.status).toBe(201);
+
+        const reminder = await send("post", "/leads/1/reminders", org1, {
+            title: "Matrix Reminder",
+            dueAt: "2030-01-15T09:00:00Z",
+        });
+        expect(reminder.status).toBe(201);
+    }
+
+    // Checks that nothing of Alice's was changed or deleted.
+    async function expectAliceRecordsUnchanged() {
+        const lead = await send("get", "/leads/1", org1);
+        expect(lead.status).toBe(200);
+        expect(lead.body.status).toBe("new");
+        expect(lead.body.assignedTo).toBeNull();
+
+        expect((await send("get", "/leads/2", org1)).status).toBe(200);
+
+        const contacts = await send("get", "/leads/1/contacts", org1);
+        expect(contacts.body).toHaveLength(1);
+        expect(contacts.body[0].name).toBe("Matrix Contact");
+
+        const deals = await send("get", "/leads/1/deals", org1);
+        expect(deals.body).toHaveLength(1);
+        expect(deals.body[0].stage).toBe("prospecting");
+
+        const reminders = await send("get", "/leads/1/reminders", org1);
+        expect(reminders.body).toHaveLength(1);
+        expect(reminders.body[0].status).toBe("pending");
+
+        const activities = await send("get", "/leads/1/activities", org1);
+        expect(activities.body).toHaveLength(0);
+
+        const history = await send("get", "/leads/1/history", org1);
+        expect(history.body).toHaveLength(0);
+    }
+
+    const dueAt = "2030-01-15T09:00:00Z";
+
+    // ----- Table 1: no token -> 401 on every protected route -----
+
+    const everyProtectedRoute: [HttpMethod, string, Body][] = [
+        ["get", "/leads", undefined],
+        ["post", "/leads", { name: "X", company: "Y", email: "x@example.com" }],
+        ["get", "/leads/1", undefined],
+        ["patch", "/leads/1", { status: "contacted" }],
+        ["patch", "/leads/1/assignment", { userId: 3 }],
+        ["delete", "/leads/2", undefined],
+        ["get", "/leads/1/history", undefined],
+        ["get", "/leads/1/contacts", undefined],
+        ["post", "/leads/1/contacts", { name: "C", email: "c@example.com" }],
+        ["get", "/leads/1/contacts/1", undefined],
+        ["patch", "/leads/1/contacts/1", { name: "Changed" }],
+        ["delete", "/leads/1/contacts/1", undefined],
+        ["get", "/leads/1/deals", undefined],
+        ["post", "/leads/1/deals", { title: "Deal" }],
+        ["patch", "/leads/1/deals/1/stage", { stage: "proposal" }],
+        ["delete", "/leads/1/deals/1", undefined],
+        ["get", "/leads/1/activities", undefined],
+        ["post", "/leads/1/activities", { type: "call" }],
+        ["get", "/leads/1/reminders", undefined],
+        ["post", "/leads/1/reminders", { title: "R", dueAt }],
+        ["patch", "/leads/1/reminders/1/done", undefined],
+        ["get", "/users", undefined],
+        [
+            "post",
+            "/users",
+            { name: "M", email: "m@example.com", password: "password123" },
+        ],
+        ["patch", "/users/3/role", { role: "owner" }],
+    ];
+
+    // Proves: no protected route can be used without logging in.
+    it.each(everyProtectedRoute)(
+        "without a token, %s %s returns 401",
+        async (method, path, body) => {
+            const response = await send(method, path, undefined, body);
+
+            expect(response.status).toBe(401);
+            expect(response.body.error.code).toBe("AUTH_REQUIRED");
+        },
+    );
+
+    // ----- Table 2: another organization -> 404, and nothing changes -----
+
+    const aliceOnlyRoutes: [HttpMethod, string, Body][] = [
+        ["get", "/leads/1", undefined],
+        ["patch", "/leads/1", { status: "lost" }],
+        ["patch", "/leads/1/assignment", { userId: 2 }],
+        ["delete", "/leads/2", undefined],
+        ["get", "/leads/1/history", undefined],
+        ["get", "/leads/1/contacts", undefined],
+        ["post", "/leads/1/contacts", { name: "C", email: "c@example.com" }],
+        ["get", "/leads/1/contacts/1", undefined],
+        ["patch", "/leads/1/contacts/1", { name: "Hacked" }],
+        ["delete", "/leads/1/contacts/1", undefined],
+        ["get", "/leads/1/deals", undefined],
+        ["post", "/leads/1/deals", { title: "Sneaky Deal" }],
+        ["patch", "/leads/1/deals/1/stage", { stage: "proposal" }],
+        ["delete", "/leads/1/deals/1", undefined],
+        ["get", "/leads/1/activities", undefined],
+        ["post", "/leads/1/activities", { type: "note", note: "Sneaky" }],
+        ["get", "/leads/1/reminders", undefined],
+        ["post", "/leads/1/reminders", { title: "Sneaky", dueAt }],
+        ["patch", "/leads/1/reminders/1/done", undefined],
+        ["patch", "/users/1/role", { role: "member" }],
+    ];
+
+    // Proves: Bob (an OWNER, so roles never stop him) gets 404 on every one of
+    // Alice's records, and afterwards all of Alice's data is exactly as it was.
+    it.each(aliceOnlyRoutes)(
+        "another organization gets 404 for %s %s, and nothing changes",
+        async (method, path, body) => {
+            await seedAliceRecords();
+
+            const response = await send(method, path, org2, body);
+            expect(response.status).toBe(404);
+
+            await expectAliceRecordsUnchanged();
+        },
+    );
+
+    // Proves: lists never include another organization's records.
+    it("never lists another organization's leads or users", async () => {
+        await seedAliceRecords();
+
+        const leads = await send("get", "/leads", org2);
+        expect(leads.body.items).toEqual([]);
+        expect(leads.body.total).toBe(0);
+
+        const search = await send("get", "/leads?q=matrix", org2);
+        expect(search.body.total).toBe(0);
+
+        const users = await send("get", "/users", org2);
+        expect(users.body.length).toBeGreaterThan(0);
+        for (const user of users.body as { organizationId: number }[]) {
+            expect(user.organizationId).toBe(2);
+        }
+    });
+
+    // ----- Table 3: owner vs member, in the same organization -----
+    // [action, method, path, body, owner gets, member gets]
+
+    type RoleRow = [string, HttpMethod, string, Body, number, number];
+
+    const roleTable: RoleRow[] = [
+        ["list leads", "get", "/leads", undefined, 200, 200],
+        [
+            "create a lead",
+            "post",
+            "/leads",
+            { name: "R", company: "R Co", email: "role-matrix@example.com" },
+            201,
+            201,
+        ],
+        [
+            "change a lead's status",
+            "patch",
+            "/leads/1",
+            { status: "contacted" },
+            200,
+            200,
+        ],
+        [
+            "assign a lead",
+            "patch",
+            "/leads/1/assignment",
+            { userId: 3 },
+            200,
+            200,
+        ],
+        ["delete a lead", "delete", "/leads/2", undefined, 204, 403],
+        [
+            "add a contact",
+            "post",
+            "/leads/1/contacts",
+            { name: "Second", email: "second-contact@example.com" },
+            201,
+            201,
+        ],
+        [
+            "edit a contact",
+            "patch",
+            "/leads/1/contacts/1",
+            { name: "Edited" },
+            200,
+            200,
+        ],
+        [
+            "delete a contact",
+            "delete",
+            "/leads/1/contacts/1",
+            undefined,
+            204,
+            403,
+        ],
+        [
+            "add a deal",
+            "post",
+            "/leads/1/deals",
+            { title: "Second Deal" },
+            201,
+            201,
+        ],
+        [
+            "move a deal's stage",
+            "patch",
+            "/leads/1/deals/1/stage",
+            { stage: "proposal" },
+            200,
+            200,
+        ],
+        ["delete a deal", "delete", "/leads/1/deals/1", undefined, 204, 403],
+        [
+            "log an activity",
+            "post",
+            "/leads/1/activities",
+            { type: "call" },
+            201,
+            201,
+        ],
+        [
+            "add a reminder",
+            "post",
+            "/leads/1/reminders",
+            { title: "Call back", dueAt },
+            201,
+            201,
+        ],
+        [
+            "complete a reminder",
+            "patch",
+            "/leads/1/reminders/1/done",
+            undefined,
+            200,
+            200,
+        ],
+        ["list users", "get", "/users", undefined, 200, 200],
+        [
+            "add a member",
+            "post",
+            "/users",
+            {
+                name: "New Member",
+                email: "new.member@alpha.example.com",
+                password: "password123",
+            },
+            201,
+            403,
+        ],
+        [
+            "change a role",
+            "patch",
+            "/users/3/role",
+            { role: "owner" },
+            200,
+            403,
+        ],
+    ];
+
+    // Each row becomes two tests: one as the owner (Alice), one as the member (Carol).
+    const roleCases = roleTable.flatMap(
+        ([action, method, path, body, ownerGets, memberGets]): [
+            string,
+            string,
+            number,
+            HttpMethod,
+            string,
+            Body,
+        ][] => [
+            ["owner", action, ownerGets, method, path, body],
+            ["member", action, memberGets, method, path, body],
+        ],
+    );
+
+    // Proves: members can do everyday work; only owners can delete records,
+    // add members or change roles.
+    it.each(roleCases)(
+        "as %s, '%s' returns %i",
+        async (role, _action, expected, method, path, body) => {
+            await seedAliceRecords();
+
+            const auth = role === "owner" ? org1 : org1Member;
+            const response = await send(method, path, auth, body);
+
+            expect(response.status).toBe(expected);
+        },
+    );
 });
