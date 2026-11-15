@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pool } from "./pool.js";
 import { withTransaction } from "./withTransaction.js";
+import { config } from "../config.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const currentDirectory = path.dirname(currentFile);
@@ -22,6 +23,10 @@ const createMigrationsTable = `
 
 async function main(): Promise<void> {
     try {
+        // Say which database this run is changing, so a mix-up is never silent.
+        const databaseName = new URL(config.DATABASE_URL).pathname.slice(1);
+        console.log(`Migrating database: ${databaseName}`);
+
         await pool.query(createMigrationsTable);
 
         const migrationFiles = (await readdir(migrationsDirectory))
