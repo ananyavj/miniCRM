@@ -2872,6 +2872,16 @@ describe("MiniCRM API", () => {
         ],
     );
 
+    // ---------- Day 43: no framework header ----------
+
+    // Proves: responses don't announce "X-Powered-By: Express" to the world.
+    it("does not send the X-Powered-By header", async () => {
+        const response = await request(app).get("/health");
+
+        expect(response.status).toBe(200);
+        expect(response.headers["x-powered-by"]).toBeUndefined();
+    });
+
     // Proves: members can do everyday work; only owners can delete records,
     // add members or change roles.
     it.each(roleCases)(

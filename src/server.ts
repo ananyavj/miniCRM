@@ -1,6 +1,23 @@
 //src/server.ts
-import myApp from "./app.js";
+import app from "./app.js";
+import { config } from "./config.js";
+import { pool } from "./db/pool.js";
 
-myApp.listen(3000, () => {
-    console.log("Server running on http://localhost:3000");
+const server = app.listen(config.PORT, () => {
+    console.log(
+        `Server running on http://localhost:${config.PORT} (${config.NODE_ENV})`,
+    );
 });
+
+function shutdown(signal: string) {
+    console.log(`${signal} received, shutting down...`);
+
+    server.close(async () => {
+        await pool.end();
+        console.log("Server stopped.");
+        process.exit(0);
+    });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

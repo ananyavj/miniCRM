@@ -9,6 +9,7 @@ import authRoutes from "./modules/auth/auth.routes.js";
 import userRoutes from "./modules/users/users.routes.js";
 
 const app = express();
+app.disable("x-powered-by");
 
 app.use(requestLogger);
 app.use(express.json({ limit: "100kb" }));
