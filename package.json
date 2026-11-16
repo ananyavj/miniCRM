@@ -13,7 +13,10 @@
     "lint": "eslint src",
     "migrate": "tsx src/db/migrate.ts",
     "migrate:test": "tsx --env-file=.env.test src/db/migrate.ts",
-    "worker": "tsx src/jobs/worker.ts"
+    "worker": "tsx src/jobs/worker.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "migrate:prod": "tsx --env-file=.env.production src/db/migrate.ts"
   },
   "keywords": [],
   "author": "",
