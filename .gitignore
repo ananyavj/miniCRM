@@ -8,3 +8,7 @@ coverage/
 body.json
 rough.txt
 _to_delete/
+
+# Personal notes (kept on this computer, not published)
+docs/retention-queue.md
+docs/walkthrough.md

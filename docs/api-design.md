@@ -1,5 +1,7 @@
 # MiniCRM API Design
 
+> **Historical (Days 5-19).** This was the original design, from before accounts and tokens existed (it still mentions the temporary `x-org-id` header, removed on Day 24). The current, complete API reference is in the [README](../README.md#api).
+
 ## 1. API Endpoints
 
 Example names and ids in this document come from the single reference dataset in `docs/data-model.md`.

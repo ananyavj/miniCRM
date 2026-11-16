@@ -2872,6 +2872,17 @@ describe("MiniCRM API", () => {
         ],
     );
 
+    // ---------- Day 45: welcome page ----------
+
+    // Proves: opening the bare address shows the welcome page, not a 404.
+    it("serves the welcome page at /", async () => {
+        const response = await request(app).get("/");
+
+        expect(response.status).toBe(200);
+        expect(response.headers["content-type"]).toContain("text/html");
+        expect(response.text).toContain("MiniCRM");
+    });
+
     // ---------- Day 43: no framework header ----------
 
     // Proves: responses don't announce "X-Powered-By: Express" to the world.

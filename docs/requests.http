@@ -1,236 +1,142 @@
+### MiniCRM example requests (VS Code REST Client extension)
+### Click "Send Request" above a request. "###" starts a new request.
+### Run "Log in" first in each section; later requests reuse its token automatically.
 
-@baseUrl = http://localhost:3000
-
-### ==================================================
-### A. HEALTH CHECKS
-### ==================================================
-
-### A1. API health — should return 200
-GET {{baseUrl}}/health
-
-### A2. Database health — should return 200 if connected
-GET {{baseUrl}}/health/db
-
-
-### ==================================================
-### B. ORGANIZATION HEADER VALIDATION
-### ==================================================
-
-### B1. Missing organization header — should return 400
-GET {{baseUrl}}/leads
-
-### B2. Non-numeric organization ID — should return 400
-GET {{baseUrl}}/leads
-x-org-id: abc
-
-### B3. Zero organization ID — should return 400
-GET {{baseUrl}}/leads
-x-org-id: 0
-
-### B4. Negative organization ID — should return 400
-GET {{baseUrl}}/leads
-x-org-id: -1
-
-### B5. Decimal organization ID — should return 400
-GET {{baseUrl}}/leads
-x-org-id: 1.5
-
-### B6. Valid organization ID — should pass header validation
-GET {{baseUrl}}/leads
-x-org-id: 1
-
-
-### ==================================================
-### C. READ LEADS
-### ==================================================
-
-### C1. List leads for organization 1
-GET {{baseUrl}}/leads
-x-org-id: 1
-
-### C2. Filter leads by status
-GET {{baseUrl}}/leads?status=contacted
-x-org-id: 1
-
-### C3. Invalid status — should return 400
-GET {{baseUrl}}/leads?status=pending
-x-org-id: 1
-
-### C4. Get lead ID 1 within organization 1
-GET {{baseUrl}}/leads/1
-x-org-id: 1
-
-### C5. Invalid lead ID — should return 400
-GET {{baseUrl}}/leads/abc
-x-org-id: 1
-
-### C6. Nonexistent lead ID — should return 404
-GET {{baseUrl}}/leads/999999
-x-org-id: 1
-
-
-### ==================================================
-### D. CREATE LEADS
-### ==================================================
-
-### D1. Create a lead for organization 1
-# @name createOrg1Lead
-POST {{baseUrl}}/leads
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "name": "Day14 Test Lead",
-  "email": "day14.test@example.com",
-  "company": "Test Company",
-  "phone": "9876543210"
-}
-
-### D2. Missing required field — should return 400
-POST {{baseUrl}}/leads
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "name": "Missing Company",
-  "email": "missing.company@example.com"
-}
-
-### D3. Invalid email — should return 400
-POST {{baseUrl}}/leads
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "name": "Invalid Email",
-  "email": "not-an-email",
-  "company": "Test Company"
-}
-
-### D4. Blank name — should return 400
-POST {{baseUrl}}/leads
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "name": "   ",
-  "email": "blank.name@example.com",
-  "company": "Test Company"
-}
-
-
-### ==================================================
-### E. UPDATE LEAD STATUS
-### ==================================================
-
-### E1. Update lead ID 1 — should return 200 if it belongs to org 1
-PATCH {{baseUrl}}/leads/1
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "status": "qualified"
-}
-
-### E2. Invalid status — should return 400
-PATCH {{baseUrl}}/leads/1
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "status": "pending"
-}
-
-### E3. Nonexistent lead — should return 404
-PATCH {{baseUrl}}/leads/999999
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "status": "qualified"
-}
-
-
-### ==================================================
-### F. DELETE LEAD
-### ==================================================
-
-### F1. Delete lead ID 1 — should return 204 if it belongs to org 1
-DELETE {{baseUrl}}/leads/1
-x-org-id: 1
-
-### F2. Delete nonexistent lead — should return 404
-DELETE {{baseUrl}}/leads/999999
-x-org-id: 1
-
-
-### ==================================================
-### G. CROSS-TENANT ISOLATION
-### ==================================================
-
-### G1. Create a lead belonging to organization 2
-# @name createOrg2Lead
-POST {{baseUrl}}/leads
-Content-Type: application/json
-x-org-id: 2
-
-{
-  "name": "Organization Two Test Lead",
-  "email": "org2.test@example.com",
-  "company": "Organization Two"
-}
-
-### G2. Try to read organization 2's lead as organization 1
-# Expected: 404, not the lead's data
-GET {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
-x-org-id: 1
-
-### G3. Read the same lead as organization 2
-# Expected: 200, with the lead's data
-GET {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
-x-org-id: 2
-
-### G4. Try to update organization 2's lead as organization 1
-# Expected: 404
-PATCH {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "status": "qualified"
-}
-
-### G5. Try to delete organization 2's lead as organization 1
-# Expected: 404
-DELETE {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
-x-org-id: 1
-
-### G6. Confirm organization 2's lead still exists
-# Expected: 200, and status should not have been changed by G4
-GET {{baseUrl}}/leads/{{createOrg2Lead.response.body.$.id}}
-x-org-id: 2
-
-
-### ==================================================
-### H. REQUEST PARSING AND ROUTING
-### ==================================================
-
-### H1. Malformed JSON — should return 400
-POST {{baseUrl}}/leads
-Content-Type: application/json
-x-org-id: 1
-
-{
-  "name": "Broken JSON",
-  "email": "broken@example.com",
-  "company": "Test Company",
-
-### H2. Unknown route — should return 404
-GET {{baseUrl}}/this-route-does-not-exist
-
-
-### ---------- Production ----------
+@local = http://localhost:3000
 @prod = https://minicrm-gd2p.onrender.com
+
+### ==================================================
+### LOCAL (npm run dev)
+### ==================================================
+
+### Health
+GET {{local}}/health
+
+### Database health
+GET {{local}}/health/db
+
+### Register an organization and its owner
+POST {{local}}/auth/register
+Content-Type: application/json
+
+{
+  "organizationName": "Local Co",
+  "name": "Ananya",
+  "email": "ananya@local.example.com",
+  "password": "local-password-123"
+}
+
+### Log in
+# @name localLogin
+POST {{local}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "ananya@local.example.com",
+  "password": "local-password-123"
+}
+
+### No token: 401 AUTH_REQUIRED
+GET {{local}}/leads
+
+### Create a lead
+# @name localLead
+POST {{local}}/leads
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Ravi Kumar",
+  "company": "Globex",
+  "email": "ravi@globex.example.com"
+}
+
+### List leads (search, sort, page)
+GET {{local}}/leads?q=globex&sort=name&order=asc&limit=10&page=1
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+
+### Change the lead's status (writes a history row)
+PATCH {{local}}/leads/{{localLead.response.body.id}}
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "status": "contacted"
+}
+
+### Status history
+GET {{local}}/leads/{{localLead.response.body.id}}/history
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+
+### Add a contact
+POST {{local}}/leads/{{localLead.response.body.id}}/contacts
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Priya Shah",
+  "email": "priya@globex.example.com"
+}
+
+### Add a deal
+POST {{local}}/leads/{{localLead.response.body.id}}/deals
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Annual plan",
+  "valueCents": 250000
+}
+
+### Log an activity
+POST {{local}}/leads/{{localLead.response.body.id}}/activities
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "type": "call",
+  "note": "Discussed pricing"
+}
+
+### Add a reminder (any timezone in, UTC out)
+POST {{local}}/leads/{{localLead.response.body.id}}/reminders
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "title": "Follow up",
+  "dueAt": "2030-01-15T09:00:00+05:30"
+}
+
+### Add a member (owners only)
+POST {{local}}/users
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Carol",
+  "email": "carol@local.example.com",
+  "password": "member-password-123"
+}
+
+### List users
+GET {{local}}/users
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+
+### Malformed JSON: 400 INVALID_JSON
+POST {{local}}/leads
+Authorization: Bearer {{localLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{ "name": "Broken JSON",
+
+### Unknown route: 404 ROUTE_NOT_FOUND
+GET {{local}}/this-route-does-not-exist
+
+
+### ==================================================
+### PRODUCTION (Render + Neon)
+### ==================================================
 
 ### Health
 GET {{prod}}/health

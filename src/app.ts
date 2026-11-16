@@ -7,6 +7,7 @@ import { ZodError } from "zod";
 import { pool } from "./db/pool.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import userRoutes from "./modules/users/users.routes.js";
+import { homePage } from "./home.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -16,6 +17,10 @@ app.use(express.json({ limit: "100kb" }));
 app.use("/auth", authRoutes);
 app.use("/leads", leadRoutes);
 app.use("/users", userRoutes);
+
+app.get("/", (_req, res) => {
+    res.type("html").send(homePage);
+});
 
 app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok" });
