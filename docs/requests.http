@@ -229,4 +229,47 @@ x-org-id: 1
 GET {{baseUrl}}/this-route-does-not-exist
 
 
+### ---------- Production ----------
+@prod = https://minicrm-gd2p.onrender.com
 
+### Health
+GET {{prod}}/health
+
+### Database health
+GET {{prod}}/health/db
+
+### Register an organization
+POST {{prod}}/auth/register
+Content-Type: application/json
+
+{
+  "organizationName": "Demo Co",
+  "name": "Ananya",
+  "email": "ananya@demo.example.com",
+  "password": "demo-password-123"
+}
+
+### Log in (the token is reused automatically below)
+# @name login
+POST {{prod}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "ananya@demo.example.com",
+  "password": "demo-password-123"
+}
+
+### Create a lead (send "Log in" first)
+POST {{prod}}/leads
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "First Online Lead",
+  "company": "Internet Co",
+  "email": "lead@internet.example.com"
+}
+
+### List leads
+GET {{prod}}/leads
+Authorization: Bearer {{login.response.body.accessToken}}
